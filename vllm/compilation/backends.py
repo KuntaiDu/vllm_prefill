@@ -5,12 +5,17 @@ import os
 import pprint
 import time
 from collections import defaultdict
+from collections.abc import Iterable
 from contextlib import ExitStack
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 from unittest.mock import patch
 
 import torch
 import torch.fx as fx
+from torch import nn, SymInt, Tensor
+from torch.fx import Node
+from torch._subclasses import FakeTensor
 
 import vllm.envs as envs
 from vllm.config import CompilationConfig, VllmConfig
@@ -23,6 +28,8 @@ from .monitor import end_monitoring_torch_compile
 from .pass_manager import PostGradPassManager
 
 logger = init_logger(__name__)
+
+CHUNK_SIZE = int(os.environ.get("VLLM_CHUNK_SIZE", 1024))
 
 
 class InductorHashCache:
@@ -407,6 +414,181 @@ class PiecewiseCompileInterpreter(torch.fx.Interpreter):
         return output
 
 
+@dataclass
+class DynamicDims:
+    '''
+    Information about the dynamic dimensions of the tensors in the graph.
+
+    `sym_index`: The index of the dynamic dimension symbol, if it exists.
+    `sym_int`: The symbolic integer for the dynamic dimension.
+    `dynamic_dims`: A mapping from the index of the input tensors to the
+        index of the dynamic dimension and the symbolic integer.
+    '''
+    sym_index: Optional[int]
+    sym_int: SymInt
+    dynamic_dims: Dict[int, Tuple[int, SymInt]]
+
+
+def infer_dynamic_dims(nodes: Iterable[Node]) -> DynamicDims:
+    '''
+    Auxiliary function to infer the dynamic dimensions of the tensors
+    from the graph nodes.
+
+    Currently, we assume only one dynamic dimension exists.
+    '''
+    ERR_MESSAGE = 'Only one dynamic dimension is supported.'
+
+    dynamic_dims: Dict[int, Tuple[int, SymInt]] = {}
+    sym_index: Optional[int] = None
+    sym_int: Optional[SymInt] = None
+
+    for arg_index, node in enumerate(nodes):
+        example_value: Union[FakeTensor, SymInt] = node.meta['example_value']
+
+        # Record the symbolic integer for the dynamic dimension
+        if isinstance(example_value, SymInt):
+            if sym_int is not None and sym_int != example_value:
+                raise ValueError(ERR_MESSAGE)
+            sym_index = arg_index
+            sym_int = example_value
+            continue
+    
+        example_value: FakeTensor
+        shape = example_value.shape
+        for dim, size in enumerate(shape):
+            size: Union[int, SymInt]
+            if isinstance(size, SymInt):
+                if sym_int is not None and sym_int != size:
+                    raise ValueError(ERR_MESSAGE)
+                if arg_index in dynamic_dims:
+                    raise ValueError(ERR_MESSAGE)
+                sym_int = size
+                dynamic_dims[arg_index] = dim, size
+    
+    return DynamicDims(sym_index, sym_int, dynamic_dims)
+
+
+def get_input_dynamic_dims(module: fx.GraphModule) -> DynamicDims:
+    '''
+    Auxiliary function to get the indices of the input tensors with dynamic
+    shapes, and the corresponding dynamic dimensions.
+
+    Currently, we assume only one dynamic dimension exists.
+    '''
+    return infer_dynamic_dims(filter(
+        lambda node: node.op == 'placeholder',
+        module.graph.nodes,
+    ))
+
+
+def get_output_dynamic_dims(module: fx.GraphModule) -> DynamicDims:
+    '''
+    Auxiliary function to get the indices of the output tensors with dynamic
+    shapes, and the corresponding dynamic dimensions.
+
+    Currently, we assume only one dynamic dimension exists.
+    '''
+    output_node: Node = next(iter(reversed(module.graph.nodes)))
+    assert output_node.op == 'output'
+
+    # The only arg of output node is either a tuple or a single return value
+    assert len(output_node.args) == 1
+    output_nodes: Union[Tuple, Any] = output_node.args[0]
+    
+    if not isinstance(output_nodes, Tuple):
+        output_nodes = output_nodes,
+    
+    output_nodes: Tuple
+    dynamic_dims = infer_dynamic_dims(output_nodes)
+
+    # Otherwise we cannot concat the output tensors
+    assert len(dynamic_dims.dynamic_dims) == len(output_nodes), \
+        'All output tensors must have dynamic shapes.'
+
+    return dynamic_dims
+
+
+class ChunkWrapper(nn.Module):
+    '''
+    This wrapper wraps a `fx.GraphModule`. It chunks the input tensors with
+    dynamic shapes and runs the wrapped module with the chunked tensors
+    iteratively. The output tensors are concatenated and returned.
+    '''
+
+    def __init__(self, module: fx.GraphModule, chunk_size: int):
+        super().__init__()
+        self.module = module
+        self.chunk_size = chunk_size
+        self.input_dynamic_dims = get_input_dynamic_dims(module)
+        self.output_dynamic_dims = get_output_dynamic_dims(module)
+    
+    def forward(self, *args) -> Union[Tensor, Tuple[Tensor, ...]]:
+        chunk_size = self.chunk_size
+        input_dynamic_dims = self.input_dynamic_dims.dynamic_dims
+        output_dynamic_dims = self.output_dynamic_dims.dynamic_dims
+
+        # The index of the symbolic size
+        sym_index = self.input_dynamic_dims.sym_index
+        # No dynamic shapes
+        if sym_index is None:
+            return self.module(*args)
+        sym_index: int
+
+        # The real chunk sizes
+        chunk_sizes: List[int] = []
+        input_chunks: Dict[int, Tuple[Tensor, ...]] = {}
+        for arg_index, (dim, _) in input_dynamic_dims.items():
+            input_tensor: Tensor = args[arg_index]
+            size = input_tensor.size(dim)
+            chunk_count = size // chunk_size
+            if size % chunk_size != 0:
+                chunk_count += 1
+            input_chunks[arg_index] = input_tensor.chunk(chunk_count, dim)
+
+            # Record the chunk sizes for the dynamic dimension
+            if not chunk_sizes:
+                chunk_sizes = [chunk.shape[dim] for chunk in input_chunks[arg_index]]
+        
+        assert input_chunks, 'No dynamic shapes found.'
+        
+        # Ensure chunk counts are consistent
+        total_chunks = len(next(iter(input_chunks.values())))
+        for chunk in input_chunks.values():
+            assert len(chunk) == total_chunks
+        
+        # Forward with each chunk
+        output_chunks: List[Tuple[Tensor]] = []
+        for chunk_index in range(total_chunks):
+            chunked_args = [
+                input_chunks[arg_index][chunk_index]
+                if arg_index in input_chunks else arg
+                for arg_index, arg in enumerate(args)
+            ]
+
+            # Substitute in the symbolic size
+            chunked_args[sym_index] = chunk_sizes[chunk_index]
+
+            output_chunk = self.module(*chunked_args)
+            # Wrap single output in a tuple for simplicity
+            if not isinstance(output_chunk, tuple):
+                output_chunk = output_chunk,
+
+            output_chunks.append(output_chunk)
+
+        # Concatenate the output tensors
+        output_tensors: List[Tensor] = []
+        for arg_index, (dim, _) in output_dynamic_dims.items():
+            output_tensors.append(torch.cat([
+                output_chunk[arg_index]
+                for output_chunk in output_chunks
+            ], dim=dim))
+
+        if len(output_tensors) == 1:
+            return output_tensors[0]
+        
+        return tuple(output_tensors)
+
+
 class VllmBackend:
     """The compilation backend for `torch.compile` with VLLM.
     It is used for compilation level of `CompilationLevel.PIECEWISE`,
@@ -538,8 +720,12 @@ class VllmBackend:
         self.graph = graph
         self.configure_post_pass()
 
+        SPLITTING_OPS = [
+            "vllm.unified_attention",
+            "vllm.unified_attention_with_output",
+        ]
         self.split_gm, self.piecewise_graphs = split_graph(
-            graph, self.compilation_config.splitting_ops)
+            graph, SPLITTING_OPS)
 
         from torch._dynamo.utils import lazy_format_graph_code
 
@@ -555,11 +741,18 @@ class VllmBackend:
             if not item.is_splitting_graph
         ]
 
+        # Wrap the split graph with a ChunkWrapper for dynamic shapes
+        for name, module in self.split_gm.named_modules():
+            # Skip the root module and the splitting layers (attentions)
+            if name == '' or name not in submod_names_to_compile:
+                continue
+            self.split_gm.set_submodule(name, ChunkWrapper(module, CHUNK_SIZE))
+
         # propagate the split graph to the piecewise backend,
         # compile submodules with symbolic shapes
-        PiecewiseCompileInterpreter(self.split_gm, submod_names_to_compile,
-                                    self.vllm_config, self.graph_pool,
-                                    self).run(*example_inputs)
+        # PiecewiseCompileInterpreter(self.split_gm, submod_names_to_compile,
+        #                             self.vllm_config, self.graph_pool,
+        #                             self).run(*example_inputs)
 
         self._called = True
 
