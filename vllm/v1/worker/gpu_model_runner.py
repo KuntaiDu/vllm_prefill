@@ -362,6 +362,7 @@ class GPUModelRunner:
         # Prepare for cascade attention if needed.
         common_prefix_len = (scheduler_output.num_common_prefix_blocks *
                              self.block_size)
+        print(f"common_prefix_len: {common_prefix_len}")
         if common_prefix_len == 0:
             # Common case.
             use_cascade = False
@@ -405,9 +406,11 @@ class GPUModelRunner:
             # and the second kernel will get an empty input. While this is not
             # a fundamental problem, our current implementation does not support
             # this case.
+
             common_prefix_len = min(
                 common_prefix_len,
                 self.input_batch.num_computed_tokens_cpu[:num_reqs].min())
+
             # common_prefix_len should be a multiple of the block size.
             common_prefix_len = (common_prefix_len // self.block_size *
                                  self.block_size)
@@ -420,6 +423,8 @@ class GPUModelRunner:
                 use_sliding_window=self.sliding_window is not None,
                 num_sms=self.num_sms,
             )
+            print(f"Use cascade attention: {use_cascade}")
+
 
         if use_cascade:
             # TODO: Optimize.

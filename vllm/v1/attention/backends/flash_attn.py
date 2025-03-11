@@ -187,6 +187,7 @@ class FlashAttentionImpl(AttentionImpl):
 
         # Compute attention and update output up to `num_actual_tokens`.
         if not attn_metadata.use_cascade:
+
             # Regular attention (common case).
             flash_attn_varlen_func(
                 q=query[:num_actual_tokens],
@@ -205,6 +206,24 @@ class FlashAttentionImpl(AttentionImpl):
                 softcap=self.logits_soft_cap,
             )
             return output
+
+        flash_attn_varlen_func(
+            q=query[:num_actual_tokens],
+            k=key_cache,
+            v=value_cache,
+            out=output[:num_actual_tokens],
+            cu_seqlens_q=attn_metadata.query_start_loc,
+            max_seqlen_q=attn_metadata.max_query_len,
+            cu_seqlens_k=attn_metadata.seq_start_loc,
+            max_seqlen_k=attn_metadata.max_seq_len,
+            softmax_scale=self.scale,
+            causal=True,
+            alibi_slopes=self.alibi_slopes,
+            window_size=self.sliding_window,
+            block_table=attn_metadata.block_table,
+            softcap=self.logits_soft_cap,
+        )
+        return output
 
         # Cascade attention (rare case).
         cascade_attention(
@@ -259,6 +278,8 @@ def use_cascade_attention(
     num_reqs = len(query_lens)
     if num_reqs < 8:
         return False
+
+    print("OK")
 
     
 

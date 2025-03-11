@@ -56,8 +56,10 @@ from .utils import (AutoWeightsLoader, PPMissingLayer, extract_layer_index,
                     make_empty_intermediate_tensors_factory, make_layers,
                     maybe_prefix)
 
+
 import os
 import yaml
+from vllm.v1.outputs import SamplerOutput
 
 class LlamaMLP(nn.Module):
 
@@ -643,8 +645,11 @@ class LlamaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
 
     def sample(self, logits: torch.Tensor,
                sampling_metadata: SamplingMetadata) -> Optional[SamplerOutput]:
-        next_tokens = self.sampler(logits, sampling_metadata)
-        return next_tokens
+        if "BYPASS_SAMPLER" in os.environ:
+            next_token = SamplerOutput(sampled_token_ids=[53224] * logits.shape[0], logprob_token_ids=None, logprobs=None, prompt_logprob_token_ids=None, prompt_logprobs=None)
+        else:
+            next_token = self.sampler(logits, sampling_metadata)
+        return next_token
 
     def load_weights(self, weights: Iterable[Tuple[str,
                                                    torch.Tensor]]) -> Set[str]:
