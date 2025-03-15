@@ -5,13 +5,15 @@ import random
 import time
 # os.environ['VLLM_ALLOW_LONG_MAX_MODEL_LEN'] = '1'
 # os.environ['CHUNK_SIZE'] = "2048"
-os.environ['VLLM_USE_V1'] = '1'
-os.environ['VLLM_ENABLE_V1_MULTIPROCESSING'] = '0'
+# os.environ['VLLM_USE_V1'] = '1'
+# os.environ['VLLM_ENABLE_V1_MULTIPROCESSING'] = '0'
 # os.environ['BYPASS_SAMPLER'] = '1'
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 import torch
 import vllm
+
+from vllm.profiler import layerwise_profile
 
 # torch.cuda.set_per_process_memory_fraction(0.59, device=None)
 
@@ -86,9 +88,13 @@ def tokenid_execution(token_ids):
     # Run the step function
     torch.cuda.synchronize()
     step_start = time.time()
+
+
     llm.llm_engine.step()
+
     torch.cuda.synchronize()
     step_end = time.time()
+
 
     # Stop sampling and wait for the sampler thread to exit
     stop_sampling = True
@@ -127,10 +133,39 @@ tokenid_execution([[i+1 for i in prefix]])
 tokenid_execution([prefix])
 
 import time
+import cProfile
+import pstats
 
-tokenid_execution([new_prefix])
 
-# tokenid_execution([prefix + suffix for suffix in suffixs])
+# Profile the execution
+# profiler = cProfile.Profile()
+# profiler.enable()
+
+
+
+# tokenid_execution([new_prefix])
+profs = []
+with layerwise_profile() as prof:
+    # tokenid_execution([prefix + suffix for suffix in suffixs])
+    tokenid_execution([new_prefix])
+    profs.append(prof)
+
+profs[0].results.print_model_table()
+
+print()
+
+profs[0].results.print_summary_table()
+
+
+
+
+
+# Save profiling results
+# profiler.disable()
+# stats = pstats.Stats(profiler)
+# stats.sort_stats('cumulative')
+# stats.dump_stats('tokenid_suffix_pg256.prof')  # Can be viewed with snakeviz
+
 
 # Clean up NVML before exiting
 nvmlShutdown()

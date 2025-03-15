@@ -6,6 +6,8 @@ import numpy as np
 import torch
 import triton
 import triton.language as tl
+import os
+import pickle
 
 from vllm.attention.backends.abstract import (AttentionBackend, AttentionImpl,
                                               AttentionMetadata, AttentionType)
@@ -186,7 +188,8 @@ class FlashAttentionImpl(AttentionImpl):
         )
 
         # Compute attention and update output up to `num_actual_tokens`.
-        if not attn_metadata.use_cascade:
+        # if not attn_metadata.use_cascade:
+        if True:
 
             # Regular attention (common case).
             flash_attn_varlen_func(
@@ -205,25 +208,36 @@ class FlashAttentionImpl(AttentionImpl):
                 block_table=attn_metadata.block_table,
                 softcap=self.logits_soft_cap,
             )
+
+            
+            # print("num_actual_tokens", num_actual_tokens)
+            # if num_actual_tokens < 15000:
+            #     # Dump parameters to pickle file for external benchmarking
+            #     os.makedirs('debug', exist_ok=True)
+            #     flash_attn_params = {
+            #         'q': query[:num_actual_tokens],
+            #         'k': key_cache,
+            #         'v': value_cache,
+            #         'out': output[:num_actual_tokens],
+            #         'cu_seqlens_q': attn_metadata.query_start_loc,
+            #         'cu_seqlens_k': attn_metadata.seq_start_loc,
+            #         'max_seqlen_q': attn_metadata.max_query_len,
+            #         'max_seqlen_k': attn_metadata.max_seq_len,
+            #         'softmax_scale': self.scale,
+            #         'causal': True,
+            #         'alibi_slopes': self.alibi_slopes,
+            #         'window_size': self.sliding_window,
+            #         'block_table': attn_metadata.block_table,
+            #         'softcap': self.logits_soft_cap
+            #     }
+            #     if torch.distributed.get_rank() == 0:
+            #         with open('debug/flash_attn_params_flatten.pkl', 'wb') as f:
+            #             pickle.dump(flash_attn_params, f)
+            #     print("Saved debug files")
+            #     breakpoint()
+
             return output
 
-        flash_attn_varlen_func(
-            q=query[:num_actual_tokens],
-            k=key_cache,
-            v=value_cache,
-            out=output[:num_actual_tokens],
-            cu_seqlens_q=attn_metadata.query_start_loc,
-            max_seqlen_q=attn_metadata.max_query_len,
-            cu_seqlens_k=attn_metadata.seq_start_loc,
-            max_seqlen_k=attn_metadata.max_seq_len,
-            softmax_scale=self.scale,
-            causal=True,
-            alibi_slopes=self.alibi_slopes,
-            window_size=self.sliding_window,
-            block_table=attn_metadata.block_table,
-            softcap=self.logits_soft_cap,
-        )
-        return output
 
         # Cascade attention (rare case).
         cascade_attention(

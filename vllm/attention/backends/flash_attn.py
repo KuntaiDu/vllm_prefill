@@ -788,52 +788,51 @@ class FlashAttentionImpl(AttentionImpl):
                 assert prefill_meta.seq_lens is not None
                 max_seq_len = max(prefill_meta.seq_lens)
 
-                # Dump tensors to file using pickle
-                tensors_dict = {
-                    # Input tensors
-                    'q': query,
-                    'k': key_cache[:4000],
-                    'v': value_cache[:4000],
+                # # Dump tensors to file using pickle
+                # tensors_dict = {
+                #     # Input tensors
+                #     'q': query,
+                #     'k': key_cache[:4000],
+                #     'v': value_cache[:4000],
                     
-                    # Sequence length information
-                    'cu_seqlens_q': prefill_meta.query_start_loc,
-                    'cu_seqlens_k': prefill_meta.seq_start_loc,
-                    'max_seqlen_q': prefill_meta.max_query_len,
-                    'max_seqlen_k': max_seq_len,
+                #     # Sequence length information
+                #     'cu_seqlens_q': prefill_meta.query_start_loc,
+                #     'cu_seqlens_k': prefill_meta.seq_start_loc,
+                #     'max_seqlen_q': prefill_meta.max_query_len,
+                #     'max_seqlen_k': max_seq_len,
                     
-                    # Attention parameters
-                    'softmax_scale': softmax_scale,
-                    'causal': _get_causal_option(attn_type),
-                    'window_size': window_size,
-                    'alibi_slopes': alibi_slopes,
-                    'block_table': prefill_meta.block_tables,
-                    'softcap': logits_soft_cap,
+                #     # Attention parameters
+                #     'softmax_scale': softmax_scale,
+                #     'causal': _get_causal_option(attn_type),
+                #     'window_size': window_size,
+                #     'alibi_slopes': alibi_slopes,
+                #     'block_table': prefill_meta.block_tables,
+                #     'softcap': logits_soft_cap,
                     
-                    # Output tensor
-                    'out': prefill_output,
-                }
+                #     # Output tensor
+                #     'out': prefill_output,
+                # }
 
-                os.makedirs('debug', exist_ok=True)
-                with open('debug/flash_attn_inputs.pkl', 'wb') as f:
-                    pickle.dump(tensors_dict, f)
+                # os.makedirs('debug', exist_ok=True)
+                # with open('debug/flash_attn_inputs.pkl', 'wb') as f:
+                #     pickle.dump(tensors_dict, f)
 
-                breakpoint()
-                # flash_attn_varlen_func(  # noqa
-                #     q=query,
-                #     k=key_cache,
-                #     v=value_cache,
-                #     cu_seqlens_q=prefill_meta.query_start_loc,
-                #     max_seqlen_q=prefill_meta.max_query_len,
-                #     cu_seqlens_k=prefill_meta.seq_start_loc,
-                #     max_seqlen_k=max_seq_len,
-                #     softmax_scale=softmax_scale,
-                #     causal=True,
-                #     window_size=window_size,
-                #     alibi_slopes=alibi_slopes,
-                #     block_table=prefill_meta.block_tables,
-                #     softcap=logits_soft_cap,
-                #     out=prefill_output,
-                # )
+                flash_attn_varlen_func(  # noqa
+                    q=query,
+                    k=key_cache,
+                    v=value_cache,
+                    cu_seqlens_q=prefill_meta.query_start_loc,
+                    max_seqlen_q=prefill_meta.max_query_len,
+                    cu_seqlens_k=prefill_meta.seq_start_loc,
+                    max_seqlen_k=max_seq_len,
+                    softmax_scale=softmax_scale,
+                    causal=True,
+                    window_size=window_size,
+                    alibi_slopes=alibi_slopes,
+                    block_table=prefill_meta.block_tables,
+                    softcap=logits_soft_cap,
+                    out=prefill_output,
+                )
 
         if decode_meta := attn_metadata.decode_metadata:
             # Decoding run.

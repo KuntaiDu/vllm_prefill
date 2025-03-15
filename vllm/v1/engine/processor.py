@@ -99,7 +99,8 @@ class Processor:
 
         assert isinstance(params, SamplingParams)
         # TODO: can we avoid cloning here in multiproc case
-        sampling_params = params.clone()
+        # sampling_params = params.clone()
+        sampling_params = params
         sampling_params.update_from_generation_config(
             self.generation_config_fields, eos_token_id)
 
