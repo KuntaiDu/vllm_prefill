@@ -180,12 +180,17 @@ class Worker:
         max_seq_len = self.cache_config.block_size * num_gpu_blocks
         max_model_len = self.model_config.max_model_len
         if max_model_len > max_seq_len:
-            raise ValueError(
-                f"The model's max seq len ({max_model_len}) "
-                "is larger than the maximum number of tokens that can be "
-                f"stored in KV cache ({max_seq_len}). Try increasing "
-                "`gpu_memory_utilization` or decreasing `max_model_len` when "
-                "initializing the engine.")
+            if "PREFILL_ONLY" in os.environ:
+                logger.warning("max_model_len (%d) is larger than max_seq_len "
+                " (%d).., overflowed tokens will not be cached.", 
+                max_model_len, max_seq_len)
+            else:
+                raise ValueError(
+                    f"The model's max seq len ({max_model_len}) "
+                    "is larger than the maximum number of tokens that can be "
+                    f"stored in KV cache ({max_seq_len}). Try increasing "
+                    "`gpu_memory_utilization` or decreasing `max_model_len` when "
+                    "initializing the engine.")
 
         self.model_runner.initialize_kv_cache(num_gpu_blocks)
 

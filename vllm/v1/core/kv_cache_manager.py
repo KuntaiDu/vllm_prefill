@@ -71,9 +71,8 @@ class KVCacheManager:
         # is finished.
         self.req_to_blocks: Dict[str, List[KVCacheBlock]] = {}
 
-        self.prefill_only_block = KVCacheBlock()
+        self.prefill_only_block = KVCacheBlock(block_id=-1)
         self.prefill_only_block.incr_ref()
-        self.prefill_only_block.block_id = -1
         self.prefill_only_block.block_hash = BlockHashType(0, tuple(), None)
 
     def get_computed_blocks(self, request: Request) -> List[KVCacheBlock]:
@@ -132,10 +131,6 @@ class KVCacheManager:
         req_blocks = self.req_to_blocks[request.request_id]
 
         num_new_blocks = num_required_blocks - len(req_blocks)
-
-        if "PREFILL_ONLY" in os.environ:
-            new_blocks = [self.prefill_only_block] * num_new_blocks
-            return new_blocks
 
         if num_new_blocks > self.free_block_queue.num_free_blocks:
             # Need to allocate new blocks due to insufficient pre-allocated
@@ -208,6 +203,8 @@ class KVCacheManager:
         Returns:
             A list of new allocated blocks.
         """
+
+        assert self.enable_caching, "Caching must be enabled."
         if num_tokens == 0:
             raise ValueError(
                 f"num_tokens must be greater than 0, got {num_tokens}")
@@ -220,17 +217,26 @@ class KVCacheManager:
 
         num_required_blocks = cdiv(num_tokens, self.block_size)
 
-        if "PREFILL_ONLY" in os.environ:
-
-            # bypasss 
-            new_blocks = [self.prefill_only_block] * num_required_blocks
-            self.req_to_blocks[request.request_id] = computed_blocks + new_blocks
-            return new_blocks
+        append_prefill_only_block = False
+        num_prefill_only_blocks = 0
 
         if (num_required_blocks > self.free_block_queue.num_free_blocks -
                 num_evictable_computed_blocks):
-            # Cannot allocate new blocks.
-            return None
+            if "PREFILL_ONLY" in os.environ:
+                logger.warning("num_required_blocks: %d, "
+                "total allocatable blocks: %d"
+                "%d tokens overflow and won't be cached",
+                num_required_blocks,
+                self.free_block_queue.num_free_blocks - num_evictable_computed_blocks,
+                num_required_blocks - (self.free_block_queue.num_free_blocks - num_evictable_computed_blocks)
+                )
+                # For prefill-only, we just let the overflowed tokens be uncached.
+                append_prefill_only_block = True
+
+                num_prefill_only_blocks = num_required_blocks - (self.free_block_queue.num_free_blocks - num_evictable_computed_blocks)
+                num_required_blocks = self.free_block_queue.num_free_blocks - num_evictable_computed_blocks
+            else:
+                return None
 
         # Touch the computed blocks to make sure they won't be evicted.
         if self.enable_caching:
@@ -256,6 +262,10 @@ class KVCacheManager:
 
         # Concatenate the computed block IDs and the new block IDs.
         new_blocks = self._get_new_blocks(num_new_blocks)
+
+        if append_prefill_only_block:
+            new_blocks = new_blocks + [self.prefill_only_block] * num_prefill_only_blocks
+
         self.req_to_blocks[request.request_id] = computed_blocks + new_blocks
 
         if not self.enable_caching:
@@ -461,6 +471,11 @@ class KVCacheManager:
             prev_block_hash_value = prev_block.block_hash.hash_value
 
         for i, blk in enumerate(full_blocks):
+
+            if blk.block_id == -1:
+                # this is a prefill-only block. We should skip it.
+                break
+
             blk_idx = blk_start_idx + i
 
             if blk_idx < num_cached_block_hashes:

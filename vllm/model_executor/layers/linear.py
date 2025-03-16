@@ -375,6 +375,7 @@ class ColumnParallelLinear(LinearBase):
 
         # Matrix multiply.
         assert self.quant_method is not None
+        breakpoint()
         output_parallel = self.quant_method.apply(self, input_, bias)
         if self.gather_output:
             # All-gather across the partitions.

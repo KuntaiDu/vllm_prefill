@@ -188,8 +188,7 @@ class FlashAttentionImpl(AttentionImpl):
         )
 
         # Compute attention and update output up to `num_actual_tokens`.
-        # if not attn_metadata.use_cascade:
-        if True:
+        if not attn_metadata.use_cascade:
 
             # Regular attention (common case).
             flash_attn_varlen_func(
@@ -292,8 +291,6 @@ def use_cascade_attention(
     num_reqs = len(query_lens)
     if num_reqs < 8:
         return False
-
-    print("OK")
 
     
 
