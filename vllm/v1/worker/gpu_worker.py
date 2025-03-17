@@ -146,6 +146,7 @@ class Worker:
         # Get the peak memory allocation recorded by torch
         peak_memory = torch.cuda.memory_stats()["allocated_bytes.all.peak"]
 
+
         # Check for any memory left around that may have been allocated on the
         # gpu outside of `torch`. NCCL operations, for example, can use a few
         # GB during a forward pass

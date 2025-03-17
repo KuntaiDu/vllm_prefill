@@ -66,6 +66,8 @@ class FlashAttentionMetadata:
     seq_start_loc: torch.Tensor
     block_table: torch.Tensor
     slot_mapping: torch.Tensor
+    query_start_loc_cpu: torch.Tensor
+    seq_start_loc_cpu: torch.Tensor
 
     # For cascade attention.
     use_cascade: bool
@@ -175,6 +177,10 @@ class FlashAttentionImpl(AttentionImpl):
         # not padded. However, we don't need to do key[:num_actual_tokens] and
         # value[:num_actual_tokens] because the reshape_and_cache_flash op uses
         # the slot_mapping's shape to determine the number of actual tokens.
+
+
+        # NOTE(Kuntai): in prefill-only case there will be -1s in block table.
+        # Luckily the reshape_and_cache_flash op will ignore the -1s.
         key_cache, value_cache = kv_cache.unbind(0)
         torch.ops._C_cache_ops.reshape_and_cache_flash(
             key,
@@ -188,12 +194,13 @@ class FlashAttentionImpl(AttentionImpl):
         )
 
 
-        if any([not isinstance(attn_metadata.block_table, torch.Tensor), 
-                not torch.any(attn_metadata.block_table < 0),
-                torch.allclose(attn_metadata.query_start_loc, attn_metadata.seq_start_loc)]):
+        if any([
+            not isinstance(attn_metadata.block_table, torch.Tensor), 
+            torch.allclose(attn_metadata.query_start_loc_cpu, attn_metadata.seq_start_loc_cpu),
+        ]):
             
-            # normal attention with no prefill-only block.
-            # or with prefill-only block but not with prefix cache.
+            # NOTE(Kuntai): normal attention with no paged cache.
+            # no need to access key and value from the block table.
             flash_attn_varlen_func(
                 q=query,
                 k=key,
@@ -211,16 +218,39 @@ class FlashAttentionImpl(AttentionImpl):
             )
             return output
 
-        else:
+        elif not torch.any(attn_metadata.block_table < 0):
 
-            # contains prefill-only blocks.
+            # NOTE(Kuntai): normal attention with paged cache
+            # but there is no prefill-only block.
+            # Fall back to old code path.
+            flash_attn_varlen_func(
+                q=query[:num_actual_tokens],
+                k=key_cache,
+                v=value_cache,
+                out=output[:num_actual_tokens],
+                cu_seqlens_q=attn_metadata.query_start_loc,
+                max_seqlen_q=attn_metadata.max_query_len,
+                cu_seqlens_k=attn_metadata.seq_start_loc,
+                max_seqlen_k=attn_metadata.max_seq_len,
+                softmax_scale=self.scale,
+                causal=True,
+                alibi_slopes=self.alibi_slopes,
+                window_size=self.sliding_window,
+                block_table=attn_metadata.block_table,
+                softcap=self.logits_soft_cap,
+            )
+            return output
+
+        else:
+            # NOTE(Kuntai): this is the case where there is at least one
+            # prefill-only block.
             # Move the page-cached KV cache located in `key_cache` and
             # `value_cache` out, and concatenate with the non-page-cached KV
             # cache located inside `key` and `value`.
             keys = []
             values = []
-            query_start_loc_cpu = attn_metadata.query_start_loc.cpu()
-            seq_start_loc_cpu = attn_metadata.seq_start_loc.cpu()
+            query_start_loc_cpu = attn_metadata.query_start_loc_cpu
+            seq_start_loc_cpu = attn_metadata.seq_start_loc_cpu
             block_table = attn_metadata.block_table
             block_size = key_cache.shape[1]
             for i in range(len(attn_metadata.block_table)):
@@ -285,7 +315,6 @@ class FlashAttentionImpl(AttentionImpl):
         """
 
         Below codes are deprecated.
-
 
         """
 

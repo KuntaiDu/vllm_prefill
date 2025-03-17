@@ -12,6 +12,8 @@ from vllm.v1.engine import EngineCoreOutput
 from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.request import Request, RequestStatus
 
+import os
+
 if TYPE_CHECKING:
     from vllm.multimodal import MultiModalKwargs
     from vllm.multimodal.base import PlaceholderRange
@@ -173,6 +175,20 @@ class Scheduler:
 
         # Next, schedule the WAITING requests.
         if not preempted_reqs:
+
+            def get_num_tokens_to_be_computed(request: Request) -> int:
+                if "PREFILL_ONLY" not in os.environ:
+                    # NOTE(Kuntai): for non-prefill, we just consider minimum req length.
+                    return request.num_tokens
+                
+                # NOTE(Kuntai): for prefill-only, we consider cache efficiency.
+                computed_blocks = self.kv_cache_manager.get_computed_blocks(
+                    request)
+                return request.num_tokens - len(computed_blocks) * self.block_size
+
+            # Perform shortest job first scheduling.
+            self.waiting = deque(sorted(self.waiting, key=get_num_tokens_to_be_computed))
+
             while self.waiting:
                 if has_partial_request:
                     break

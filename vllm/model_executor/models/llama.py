@@ -94,8 +94,8 @@ class LlamaMLP(nn.Module):
 
     def forward(self, x_input):
 
-        if "CHUNK_SIZE" in os.environ:
-            chunk_size = int(os.environ["CHUNK_SIZE"])
+        if "PREFILL_ONLY_CHUNK_SIZE" in os.environ:
+            chunk_size = int(os.environ["PREFILL_ONLY_CHUNK_SIZE"])
         
             xs = list(x_input.split(chunk_size))
             
@@ -231,8 +231,8 @@ class LlamaAttention(nn.Module):
 
         attn_output = self.attn(q, k, v, kv_cache, attn_metadata)
 
-        if "CHUNK_SIZE" in os.environ:
-            chunk_size = int(os.environ["CHUNK_SIZE"])
+        if "PREFILL_ONLY_CHUNK_SIZE" in os.environ:
+            chunk_size = int(os.environ["PREFILL_ONLY_CHUNK_SIZE"])
             
             attn_outputs = list(attn_output.split(chunk_size))
 

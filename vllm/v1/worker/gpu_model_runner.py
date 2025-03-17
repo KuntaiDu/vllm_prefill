@@ -423,7 +423,7 @@ class GPUModelRunner:
                 use_sliding_window=self.sliding_window is not None,
                 num_sms=self.num_sms,
             )
-            print(f"Use cascade attention: {use_cascade}")
+            # print(f"Use cascade attention: {use_cascade}")
 
 
         if use_cascade:
@@ -449,8 +449,10 @@ class GPUModelRunner:
             num_actual_tokens=total_num_scheduled_tokens,
             max_query_len=max_num_scheduled_tokens,
             query_start_loc=query_start_loc,
+            query_start_loc_cpu=query_start_loc.cpu(),
             max_seq_len=max_seq_len,
             seq_start_loc=seq_start_loc,
+            seq_start_loc_cpu=seq_start_loc.cpu(),
             block_table=(
                 self.input_batch.block_table.get_device_tensor()[:num_reqs]),
             slot_mapping=slot_mapping,
@@ -726,7 +728,9 @@ class GPUModelRunner:
         ]
 
         # Profile with multimodal encoder & encoder cache.
-        if self.is_multimodal_model:
+
+        # NOTE(Kuntai): in our evaluation we won't evaluate image so ignore.
+        if False and self.is_multimodal_model:
 
             # Create dummy batch of multimodal inputs.
             dummy_request_data = self.input_registry.dummy_data_for_profiling(
@@ -821,11 +825,13 @@ class GPUModelRunner:
         # Trigger compilation for general shape.
         hidden_states = self._dummy_run(self.model, self.max_num_tokens,
                                         dummy_kv_caches)
-        logits = self.model.compute_logits(hidden_states, None)
-        logits = logits[:self.max_num_tokens]
+        # lol ignore logits for now. This can also be optimized by chunking.
+        # logits = self.model.compute_logits(hidden_states, None)
+        # logits = logits[:self.max_num_tokens]
         # TODO(woosuk): Consider the memory usage of the sampler.
         torch.cuda.synchronize()
-        del hidden_states, logits
+        del hidden_states
+        # del logits
         self.encoder_cache.clear()
         gc.collect()
 

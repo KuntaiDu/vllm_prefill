@@ -38,8 +38,11 @@ class UnquantizedEmbeddingMethod(QuantizeMethodBase):
               layer: torch.nn.Module,
               x: torch.Tensor,
               bias: Optional[torch.Tensor] = None) -> torch.Tensor:
-        return F.linear(x, layer.weight, bias)
 
+        # NOTE(Kuntai): This line consumes a lot of GPU memory and could be
+        # optimized by chunking.
+        return F.linear(x, layer.weight, bias)
+        
     def embedding(self, layer: torch.nn.Module,
                   input_: torch.Tensor) -> torch.Tensor:
         return F.embedding(input_, layer.weight)

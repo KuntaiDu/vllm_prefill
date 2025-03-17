@@ -137,11 +137,9 @@ class UnquantizedLinearMethod(LinearMethodBase):
               x: torch.Tensor,
               bias: Optional[torch.Tensor] = None) -> torch.Tensor:
 
-        try:
-            result = F.linear(x, layer.weight, bias)
-        except Exception as e:
-            breakpoint()
-
+        # to debug the shape issue related to chunking.
+        result = F.linear(x, layer.weight, bias)
+        
         return result
 
         return F.linear(x, layer.weight, bias)
