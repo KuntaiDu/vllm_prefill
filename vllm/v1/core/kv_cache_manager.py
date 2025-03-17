@@ -74,6 +74,7 @@ class KVCacheManager:
         self.prefill_only_block = KVCacheBlock(block_id=-1)
         self.prefill_only_block.incr_ref()
         self.prefill_only_block.block_hash = BlockHashType(0, tuple(), None)
+        self.prefill_only_block.is_prefill_only = True
 
     def get_computed_blocks(self, request: Request) -> List[KVCacheBlock]:
         """Get the computed (cached) blocks for the request.
@@ -155,7 +156,10 @@ class KVCacheManager:
             )
             assert num_new_blocks > 0
 
-            new_blocks = self._get_new_blocks(num_new_blocks)
+            if "PREFILL_ONLY" in os.environ:
+                new_blocks = [self.prefill_only_block] * num_new_blocks
+            else:
+                new_blocks = self._get_new_blocks(num_new_blocks)
             req_blocks.extend(new_blocks)
 
         if not self.enable_caching:
@@ -224,7 +228,7 @@ class KVCacheManager:
                 num_evictable_computed_blocks):
             if "PREFILL_ONLY" in os.environ:
                 logger.warning("num_required_blocks: %d, "
-                "total allocatable blocks: %d"
+                "total allocatable blocks: %d, "
                 "%d tokens overflow and won't be cached",
                 num_required_blocks,
                 self.free_block_queue.num_free_blocks - num_evictable_computed_blocks,
@@ -258,7 +262,7 @@ class KVCacheManager:
             # num_prompt_tokens + max_tokens > max_model_len.
             self.max_num_blocks_per_req - len(computed_blocks),
         )
-        assert num_new_blocks > 0
+        assert num_new_blocks >= 0
 
         # Concatenate the computed block IDs and the new block IDs.
         new_blocks = self._get_new_blocks(num_new_blocks)
@@ -304,6 +308,9 @@ class KVCacheManager:
             ordered_blocks = reversed(blocks)
 
         for block in ordered_blocks:
+            if block.is_prefill_only:
+                # this is prefill-only block. Skip.
+                continue
             block.decr_ref()
             if block.ref_cnt == 0:
                 self.free_block_queue.append(block)
@@ -369,6 +376,10 @@ class KVCacheManager:
         Returns:
             A list of new block.
         """
+
+        if num_blocks == 0:
+            return []
+
         if num_blocks > self.free_block_queue.num_free_blocks:
             raise ValueError(
                 f"Cannot get {num_blocks} free blocks from the pool")
@@ -472,9 +483,9 @@ class KVCacheManager:
 
         for i, blk in enumerate(full_blocks):
 
-            if blk.block_id == -1:
-                # this is a prefill-only block. We should skip it.
-                break
+            # skip prefill-only blocks.
+            if blk.is_prefill_only:
+                continue
 
             blk_idx = blk_start_idx + i
 

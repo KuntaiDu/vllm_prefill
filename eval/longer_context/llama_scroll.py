@@ -7,6 +7,7 @@ os.environ['VLLM_ALLOW_LONG_MAX_MODEL_LEN'] = '1'
 os.environ['VLLM_ENABLE_V1_MULTIPROCESSING'] = '0'
 os.environ['CHUNK_SIZE'] = "4096"
 os.environ['VLLM_USE_V1'] = '1'
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 torch.cuda.set_per_process_memory_fraction(0.59, device=None)
 

@@ -187,9 +187,113 @@ class FlashAttentionImpl(AttentionImpl):
             v_scale,
         )
 
+
+        if any([not isinstance(attn_metadata.block_table, torch.Tensor), 
+                not torch.any(attn_metadata.block_table < 0),
+                torch.allclose(attn_metadata.query_start_loc, attn_metadata.seq_start_loc)]):
+            
+            # normal attention with no prefill-only block.
+            # or with prefill-only block but not with prefix cache.
+            flash_attn_varlen_func(
+                q=query,
+                k=key,
+                v=value,
+                cu_seqlens_q=attn_metadata.query_start_loc,
+                max_seqlen_q=attn_metadata.max_query_len,
+                cu_seqlens_k=attn_metadata.seq_start_loc,
+                max_seqlen_k=attn_metadata.max_seq_len,
+                softmax_scale=self.scale,
+                causal=True,
+                alibi_slopes=self.alibi_slopes,
+                window_size=self.sliding_window,
+                softcap=self.logits_soft_cap,
+                out=output[:num_actual_tokens],
+            )
+            return output
+
+        else:
+
+            # contains prefill-only blocks.
+            # Move the page-cached KV cache located in `key_cache` and
+            # `value_cache` out, and concatenate with the non-page-cached KV
+            # cache located inside `key` and `value`.
+            keys = []
+            values = []
+            query_start_loc_cpu = attn_metadata.query_start_loc.cpu()
+            seq_start_loc_cpu = attn_metadata.seq_start_loc.cpu()
+            block_table = attn_metadata.block_table
+            block_size = key_cache.shape[1]
+            for i in range(len(attn_metadata.block_table)):
+                
+                current_seq_len = seq_start_loc_cpu[i+1] - seq_start_loc_cpu[i]
+
+                current_block_table = block_table[i][:cdiv(current_seq_len, block_size)]
+                # get non-prefill-only block.
+                current_block_table = current_block_table[current_block_table >= 0]
+
+                page_cached_tokens = len(current_block_table) * block_size
+                current_query_end_pos = query_start_loc_cpu[i+1]
+                offset = current_query_end_pos - current_seq_len
+
+                # page-cached key.
+                keys.append(
+                    key_cache[current_block_table].view(
+                        page_cached_tokens,
+                        *key_cache.shape[2:]
+                    )
+                )
+                # non-page-cached key.
+                keys.append(
+                    key[page_cached_tokens + offset: current_seq_len + offset]
+                )
+
+                # page-cached value.
+                values.append(
+                    value_cache[current_block_table].view(
+                        page_cached_tokens,
+                        *value_cache.shape[2:]
+                    )
+                )
+                # non-page-cached value.
+                values.append(
+                    value[page_cached_tokens + offset: current_seq_len + offset]
+                )
+
+            key = torch.cat(keys, dim=0)
+            value = torch.cat(values, dim=0)
+            
+            # flat memory layout attention and then exit.
+            flash_attn_varlen_func(
+                q=query,
+                k=key,
+                v=value,
+                cu_seqlens_q=attn_metadata.query_start_loc,
+                max_seqlen_q=attn_metadata.max_query_len,
+                cu_seqlens_k=attn_metadata.seq_start_loc,
+                max_seqlen_k=attn_metadata.max_seq_len,
+                softmax_scale=self.scale,
+                causal=True,
+                alibi_slopes=self.alibi_slopes,
+                window_size=self.sliding_window,
+                softcap=self.logits_soft_cap,
+                out=output[:num_actual_tokens],
+            )
+            return output
+
+
+
+        """
+
+        Below codes are deprecated.
+
+
+        """
+
         # Compute attention and update output up to `num_actual_tokens`.
         if not attn_metadata.use_cascade:
-
+                
+                
+                
             # Regular attention (common case).
             flash_attn_varlen_func(
                 q=query[:num_actual_tokens],

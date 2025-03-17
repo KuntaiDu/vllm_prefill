@@ -40,6 +40,8 @@ class KVCacheBlock:
     prev_free_block: Optional["KVCacheBlock"] = None
     next_free_block: Optional["KVCacheBlock"] = None
 
+    is_prefill_only: bool = False
+
     def incr_ref(self):
         self.ref_cnt += 1
 

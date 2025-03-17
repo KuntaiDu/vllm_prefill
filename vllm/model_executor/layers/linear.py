@@ -137,6 +137,13 @@ class UnquantizedLinearMethod(LinearMethodBase):
               x: torch.Tensor,
               bias: Optional[torch.Tensor] = None) -> torch.Tensor:
 
+        try:
+            result = F.linear(x, layer.weight, bias)
+        except Exception as e:
+            breakpoint()
+
+        return result
+
         return F.linear(x, layer.weight, bias)
 
 
@@ -375,7 +382,6 @@ class ColumnParallelLinear(LinearBase):
 
         # Matrix multiply.
         assert self.quant_method is not None
-        breakpoint()
         output_parallel = self.quant_method.apply(self, input_, bias)
         if self.gather_output:
             # All-gather across the partitions.
