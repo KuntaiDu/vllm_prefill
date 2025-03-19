@@ -37,15 +37,25 @@ Commandline arguments:
 In the meantime, it also supports all the vLLM engine args to initialize the 
 LLM engine. You can refer to the `vllm.engine.arg_utils.EngineArgs` for more
 details.
+python benchmark_recommendation_modify.py  --prefill-only --shuffle-seed 10 --output-len 10 --num-documents  8 --num-users 5 --user-history-length 2
+
+python benchmark_serving.py \
+    --backend vllm \
+    --model meta-llama/Llama-3.1-8B-Instruct \
+    --dataset-name sharegpt \
+    --dataset-path /root/Eamin/vllm_prefill/eval/eval_linkin_workload/ShareGPT_V3_unfiltered_cleaned_split.json \
+    --request-rate 5 \
+    --num-prompts 100
 """
 
 import dataclasses
 import random
 import time
-
+import string
 from vllm import LLM, SamplingParams
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import FlexibleArgumentParser
+import json
 
 
 def test_long_document_qa(llm=None, sampling_params=None, prompts=None):
@@ -110,24 +120,58 @@ def main(args):
     # Prepare the prompts:
     # we append the document id at the beginning to avoid any of the document
     # being the prefix of other documents
+# Generate unique random 2-letter alpha suffix for each user
+    user_alphas = [
+        ''.join(random.choices(string.ascii_lowercase, k=2))
+        for _ in range(args.num_users)
+    ]
+    doc_alphas = [
+        ''.join(random.choices(string.ascii_lowercase, k=2))
+        for _ in range(args.num_documents)
+    ]
+
+    # Build user strings:
+    # - Each user gets a unique alpha
+    # - User section is "user:{i}:\n" + (for j in 1..n) "j + alpha" repeated 20000 times
     users = [
-        f'user:{str(i)}:\n' + ' '.join(['hi'] * args.user_history_length)
+        f'user:{str(i)}:\n' + ' '.join(
+            [f'{j+1}{user_alphas[i]}' for j in range(args.user_history_length) for _ in range(2)]
+        )
         for i in range(args.num_users)
     ]
 
+
+
+    # Build document strings:
+    # - Document section is "document:{i}:\n" + (for j in n+1..n+50) "j + last_alpha" repeated 150 times
     documents = [
-        f'document:{str(i)}:\n' + ' '.join(['hi'] * args.document_length)
+        f'document:{str(i)}:\n' + ' '.join(
+            [f'{j + args.user_history_length + 1}{doc_alphas[i]}'for j in range(5)for _ in range(1)] 
+        )
         for i in range(args.num_documents)
     ]
-    
-    prompts = [i+j for i in users for j in documents]
-    # warmup = [i+j for i in users for j in documents[:2]]
-    with open("test_data.txt", "w") as f:
-        for prompt in prompts:
-            f.write(prompt + "\n\n")
 
+    # Combine user and document pairs by Cartesian product
+    prompts = [i + j for i in users for j in documents]
+    # warmup = [i+j for i in users for j in documents[:2]]
+    with open("test_data_modify.txt", "w") as f:
+            for prompt in prompts:
+                f.write(prompt + "\n\n")
     random.shuffle(prompts)
-    
+    records = []
+    for prompt in prompts:
+        unique_id = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+        record = {
+            "id": unique_id,
+            "conversations": [
+                {"from": "human", "value": prompt},
+                {"from": "gpt", "value": ""}
+            ]
+        }
+        records.append(record)
+
+    with open("test_data_modify.json", "w", encoding="utf-8") as f:
+        json.dump(records, f, ensure_ascii=False, indent=2)
     import os
     if args.prefill_only:
         os.environ['PREFILL_ONLY'] = '1'
@@ -155,7 +199,7 @@ def main(args):
         sampling_params=sampling_params,
     )
     
-    with open("results.yaml", "a") as f:
+    with open("results_modify.yaml", "a") as f:
         import yaml
         f.write(yaml.dump([{
             "user_history_length": args.user_history_length,
