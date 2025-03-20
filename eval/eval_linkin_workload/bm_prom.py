@@ -43,9 +43,12 @@ python benchmark_serving.py \
     --backend vllm \
     --model meta-llama/Llama-3.1-8B-Instruct \
     --dataset-name sharegpt \
-    --dataset-path /root/Eamin/vllm_prefill/eval/eval_linkin_workload/test_data_modify.json \
+    --dataset-path /root/Eamin/vllm_prefill/eval/eval_linkin_workload/link_json/test_data_2.json \
     --request-rate 5 \
-    --num-prompts 100
+    --num-prompts 100\
+    --save-result \
+    --result-dir /root/Eamin/vllm_prefill/eval/eval_linkin_workload/link_result_json\
+    --result-filename my_benchmark.json
 """
 
 import dataclasses
@@ -148,7 +151,7 @@ def main(args):
             }
             records.append(record)
 
-    with open("test_data_modify.json", "w", encoding="utf-8") as f:
+    with open(args.output_json, "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
     import os
     if args.prefill_only:
@@ -228,6 +231,10 @@ if __name__ == "__main__":
     parser.add_argument('--shuffle-seed', type=int, default=0)
     
     parser.add_argument('--prefill-only', action='store_true')
+    parser.add_argument('--output-json',
+                    type=str,
+                    default='test_data_modify.json',
+                    help='Path to save the generated JSON file.')
     
 
     parser = EngineArgs.add_cli_args(parser)
