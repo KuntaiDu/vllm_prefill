@@ -30,6 +30,8 @@ bash generate_json.sh
 ```
 
 
+
+
 修改num users 范围
 ```
 #!/bin/bash
@@ -95,7 +97,7 @@ python benchmark_serving_linkin.py \
 
 
 
-扫描频率   `/root/Eamin/vllm_prefill/eval/eval_linkin_workloa`
+扫描频率   `/root/Eamin/vllm_prefill/eval/eval_linkin_workload`
 直接跑`qps.sh`
 
 ```
@@ -140,3 +142,6 @@ eval/eval_linkin_workload/qps/3
 result_qps_1_data_2.json
 ```
 画图的话用qps文件夹里的`draw.py`
+
+这里有个问题 .sh脚本可能路径有点复杂
+可以直接把`benchmark_serving_linkin.py` 移动到这个文件夹里 当时看benchmark都在那个文件夹里就没动
