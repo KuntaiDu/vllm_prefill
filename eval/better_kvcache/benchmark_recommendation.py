@@ -122,9 +122,6 @@ def main(args):
     
     prompts = [i+j for i in users for j in documents]
     # warmup = [i+j for i in users for j in documents[:2]]
-    with open("test_data.txt", "w") as f:
-        for prompt in prompts:
-            f.write(prompt + "\n\n")
 
     random.shuffle(prompts)
     
@@ -195,6 +192,7 @@ if __name__ == "__main__":
         default=10000,
         help='Range of input lengths for sampling prompts,'
         'specified as "min:max" (e.g., "128:256").')
+
     parser.add_argument('--num-documents',
                         type=int,
                         default=8,
