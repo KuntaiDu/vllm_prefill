@@ -172,6 +172,7 @@ def main(args):
 
     with open("test_data_modify.json", "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
+        
     import os
     if args.prefill_only:
         os.environ['PREFILL_ONLY'] = '1'
