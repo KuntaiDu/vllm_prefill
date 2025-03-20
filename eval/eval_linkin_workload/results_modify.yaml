@@ -1,0 +1,12 @@
+- benchmark_time: 0.35670018196105957
+  document_length: 10000
+  num_documents: 2
+  num_users: 1
+  prefill_only: true
+  user_history_length: 2
+- benchmark_time: 0.16280102729797363
+  document_length: 10000
+  num_documents: 8
+  num_users: 5
+  prefill_only: true
+  user_history_length: 2
