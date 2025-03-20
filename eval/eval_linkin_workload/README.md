@@ -66,11 +66,13 @@ done
 
 2.跑数据
 
-cd 到vllm_prefill/benchmarks
+cd 到`vllm_prefill/benchmarks`
 
-benchmark_serving_linkin.py这个
+`benchmark_serving_linkin.py`
 
-修改的点是数据集有filter 会去掉对话轮数少 我把这个去掉了
+
+
+相比于`benchmark_serving.py`修改的点是数据集有filter 会去掉对话轮数少 我把这个去掉了
 
 
 跑的话
