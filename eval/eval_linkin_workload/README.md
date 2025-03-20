@@ -17,9 +17,11 @@
 
 `clean_gen.py`
 
-但是这个只能生成一个numusers的数据，dirty fix了一下循环调用脚本
+但是这个只能生成一个单个`num users`的数据，dirty fix了一下循环调用脚本
 
 `generate_json.sh`
+
+
 
 跑的话
 ```
@@ -54,9 +56,12 @@ done
 
 
 
+跑完会有
+`eval_linkin_workload/link_json`
+底下很多
 
-
-
+`test_data_2.json`
+这样的文件夹最后的数字是numusers
 
 
 2.跑数据
