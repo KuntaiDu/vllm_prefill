@@ -89,8 +89,8 @@ python benchmark_serving_linkin.py \
     --request-rate 5 \
     --num-prompts 100\
     --save-result \
-    --result-dir /root/Eamin/vllm_prefill/eval/eval_linkin_workload/link_result_json\
-    --result-filename my_benchmark.json
+    --result-dir /root/Eamin/vllm_prefill/eval/eval_linkin_workload/link_result_json\  <=输出路径记得改一下
+    --result-filename my_benchmark.json 《=其实改不改都无所谓 后面的qps.sh会自动生成文件路径和文件名 在那改也行
 ```
 
 
