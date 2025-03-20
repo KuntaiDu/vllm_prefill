@@ -5,8 +5,14 @@ DATA_DIR="/root/Eamin/vllm_prefill/eval/eval_linkin_workload/link_json"
 # Define the directory to save the benchmark results
 RESULT_DIR="/root/Eamin/vllm_prefill/eval/eval_linkin_workload/link_result_json"
 
-# Loop through each matching JSON file in the dataset directory
-for json_file in "$DATA_DIR"/test_data_*.json; do
+# Find matching files, extract the number, sort numerically
+file_list=$(ls "$DATA_DIR"/test_data_*.json 2>/dev/null | \
+    sed -E 's/.*test_data_([0-9]+)\.json/\1 \0/' | \
+    sort -n | \
+    awk '{print $2}')
+
+# Loop through each sorted JSON file
+for json_file in $file_list; do
     # Extract the base filename (e.g., test_data_2.json)
     json_filename=$(basename "$json_file")
 
@@ -30,8 +36,8 @@ for json_file in "$DATA_DIR"/test_data_*.json; do
     echo "num-prompts: $num_prompts"
     echo "Result will be saved as $result_filename"
 
-    # Run the benchmark_serving.py with specified arguments
-    python benchmark_serving.py \
+    # Run the benchmark_serving_linkin.py with specified arguments
+    python benchmark_serving_linkin.py \
         --backend vllm \
         --model meta-llama/Llama-3.1-8B-Instruct \
         --dataset-name sharegpt \

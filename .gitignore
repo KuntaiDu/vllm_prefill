@@ -203,3 +203,5 @@ benchmarks/*.json
 actionlint
 shellcheck*/
 eval/eval_linkin_workload/ShareGPT_V3_unfiltered_cleaned_split.json
+vllm_prefill/eval/eval_linkin_workload/link_result_json/
+vllm_prefill/eval/eval_linkin_workload/link_json/
