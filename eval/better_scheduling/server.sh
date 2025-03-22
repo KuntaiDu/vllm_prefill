@@ -7,27 +7,26 @@ if [ $# -ne 1 ]; then
     exit 1
 fi
 
-case $1 in
-    "vanilla")
-        vllm serve meta-llama/Llama-3.1-8B-Instruct \
-            --max-model-len $MAX_MODEL_LEN \
-            --gpu-memory-utilization 0.31 \
-            --enable-prefix-caching \
-            --max-num-batched-tokens $MAX_MODEL_LEN
-        ;;
-    "prefill")
-        PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
-        vllm serve meta-llama/Llama-3.1-8B-Instruct \
-            --enforce-eager \
-            --max-model-len $MAX_MODEL_LEN \
-            --gpu-memory-utilization 0.31 \
-            --enable-prefix-caching \
-            --max-num-batched-tokens $MAX_MODEL_LEN \
-            --enable-chunked-prefill=false
-        ;;
-    *)
-        echo "Invalid argument. Use 'vanilla' or 'prefill'"
-        exit 1
-        ;;
-esac
+if [ "$1" = "vanilla" ]; then
+    VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
+        --max-model-len $MAX_MODEL_LEN \
+        --gpu-memory-utilization 0.31 \
+        --enable-prefix-caching \
+        --enforce-eager \
+        --max-num-seqs 1 \
+        --max-num-batched-tokens $MAX_MODEL_LEN
+elif [ "$1" = "prefill" ]; then
+    PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
+    vllm serve meta-llama/Llama-3.1-8B-Instruct \
+        --enforce-eager \
+        --max-model-len $MAX_MODEL_LEN \
+        --gpu-memory-utilization 0.31 \
+        --enable-prefix-caching \
+        --max-num-batched-tokens $MAX_MODEL_LEN \
+        --enable-chunked-prefill=false \
+        --max-num-seqs 1
+else
+    echo "Invalid argument. Use 'vanilla' or 'prefill'"
+    exit 1
+fi
     
