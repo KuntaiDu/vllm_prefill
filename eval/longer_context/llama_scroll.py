@@ -12,7 +12,7 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 torch.cuda.set_per_process_memory_fraction(0.32, device=None)
 
 # MLEN = 211000
-MLEN = 70000
+MLEN = 1000
 
 samp = vllm.SamplingParams(max_tokens=1)
 
@@ -24,6 +24,7 @@ llm = vllm.LLM(
     enable_prefix_caching=True,
     max_num_batched_tokens=MLEN + 100,
     enable_chunked_prefill=False,
+    max_num_seqs=100,
     # tensor_parallel_size=8,
 )
 
