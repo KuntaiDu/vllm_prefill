@@ -1,7 +1,12 @@
 #!/bin/bash
 
-num_users=8
-num_documents=5
+# num_users=8
+# num_documents=5
+# user_history_length=20000
+# document_length=150
+
+num_users=10
+num_documents=1
 user_history_length=20000
 document_length=150
 
@@ -19,6 +24,6 @@ python benchmark_serving.py \
     --model meta-llama/Llama-3.1-8B-Instruct \
     --dataset-name sharegpt \
     --dataset-path linkedin_datsaet_simulated.json \
-    --request-rate inf \
+    --request-rate 0.2 \
     --sharegpt-output-len 1 \
     --backend vllm
