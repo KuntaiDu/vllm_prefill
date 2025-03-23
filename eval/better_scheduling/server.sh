@@ -13,6 +13,7 @@ if [ "$1" = "vanilla" ]; then
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization 0.31 \
         --enforce-eager \
+        --enable-prefix-caching \
         --max-num-seqs 1 
 elif [ "$1" = "prefill" ]; then
     PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
