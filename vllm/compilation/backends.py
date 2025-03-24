@@ -29,7 +29,9 @@ from .pass_manager import PostGradPassManager
 
 logger = init_logger(__name__)
 
-CHUNK_SIZE = int(os.environ.get("VLLM_CHUNK_SIZE", 1024))
+PREFILL_ONLY = os.environ.get("PREFILL_ONLY", "0") == "1"
+ENABLE_CHUNK = PREFILL_ONLY and os.environ.get("PREFILL_ONLY_CHUNK_SIZE") is not None
+CHUNK_SIZE = int(os.environ.get("PREFILL_ONLY_CHUNK_SIZE", 1024))
 
 
 class InductorHashCache:
@@ -523,6 +525,16 @@ class ChunkWrapper(nn.Module):
         self.output_dynamic_dims = get_output_dynamic_dims(module)
     
     def forward(self, *args) -> Union[Tensor, Tuple[Tensor, ...]]:
+        # print(f'Starting chunked forward: {self.module._get_name()}')
+
+        # for i, arg in enumerate(args):
+        #     if isinstance(arg, torch.Tensor):
+        #         print(f'Arg {i}:', arg.shape)
+        #     else:
+        #         print(f'Arg {i}:', arg)
+
+        # print(self.module.code)
+
         chunk_size = self.chunk_size
         input_dynamic_dims = self.input_dynamic_dims.dynamic_dims
         output_dynamic_dims = self.output_dynamic_dims.dynamic_dims
@@ -677,6 +689,14 @@ class VllmBackend:
             logger.debug(
                 "Traced files (to be considered for compilation cache):\n%s",
                 "\n".join(forward_code_files))
+
+            # FIXME(bowen): A hack here to avoid error opening files
+            # <frozen collections.abc>
+            forward_code_files = list(filter(
+                lambda x: not x.startswith('<frozen'), 
+                forward_code_files
+            ))
+
             hash_content = []
             for filepath in forward_code_files:
                 hash_content.append(filepath)
@@ -742,11 +762,12 @@ class VllmBackend:
         ]
 
         # Wrap the split graph with a ChunkWrapper for dynamic shapes
-        for name, module in self.split_gm.named_modules():
-            # Skip the root module and the splitting layers (attentions)
-            if name == '' or name not in submod_names_to_compile:
-                continue
-            self.split_gm.set_submodule(name, ChunkWrapper(module, CHUNK_SIZE))
+        if ENABLE_CHUNK:
+            for name, module in self.split_gm.named_modules():
+                # Skip the root module and the splitting layers (attentions)
+                if name == '' or name not in submod_names_to_compile:
+                    continue
+                self.split_gm.set_submodule(name, ChunkWrapper(module, CHUNK_SIZE))
 
         # propagate the split graph to the piecewise backend,
         # compile submodules with symbolic shapes

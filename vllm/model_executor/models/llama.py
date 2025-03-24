@@ -94,32 +94,32 @@ class LlamaMLP(nn.Module):
 
     def forward(self, x_input):
 
-        if "PREFILL_ONLY_CHUNK_SIZE" in os.environ:
-            chunk_size = int(os.environ["PREFILL_ONLY_CHUNK_SIZE"])
+        # if False and "PREFILL_ONLY_CHUNK_SIZE" in os.environ:
+        #     chunk_size = int(os.environ["PREFILL_ONLY_CHUNK_SIZE"])
         
-            xs = list(x_input.split(chunk_size))
+        #     xs = list(x_input.split(chunk_size))
             
             
-            for i in range(len(xs)):
-                x = xs[i]
+        #     for i in range(len(xs)):
+        #         x = xs[i]
 
-                x, _ = self.gate_up_proj(x)
-                x = self.act_fn(x)
-                x, _ = self.down_proj(x)
+        #         x, _ = self.gate_up_proj(x)
+        #         x = self.act_fn(x)
+        #         x, _ = self.down_proj(x)
                 
-                xs[i][:] = x
+        #         xs[i][:] = x
                 
-            return x_input
+        #     return x_input
         
-        else:
+        # else:
             
-            x = x_input
-            
-            x, _ = self.gate_up_proj(x)
-            x = self.act_fn(x)
-            x, _ = self.down_proj(x)
-            
-            return x
+        x = x_input
+        
+        x, _ = self.gate_up_proj(x)
+        x = self.act_fn(x)
+        x, _ = self.down_proj(x)
+        
+        return x
 
 
 class LlamaAttention(nn.Module):
@@ -231,19 +231,19 @@ class LlamaAttention(nn.Module):
 
         attn_output = self.attn(q, k, v, kv_cache, attn_metadata)
 
-        if "PREFILL_ONLY_CHUNK_SIZE" in os.environ:
-            chunk_size = int(os.environ["PREFILL_ONLY_CHUNK_SIZE"])
+        # if "PREFILL_ONLY_CHUNK_SIZE" in os.environ:
+        #     chunk_size = int(os.environ["PREFILL_ONLY_CHUNK_SIZE"])
             
-            attn_outputs = list(attn_output.split(chunk_size))
+        #     attn_outputs = list(attn_output.split(chunk_size))
 
-            for i in range(len(attn_outputs)):
-                x, _ = self.o_proj(attn_outputs[i])
-                attn_outputs[i][:] = x
+        #     for i in range(len(attn_outputs)):
+        #         x, _ = self.o_proj(attn_outputs[i])
+        #         attn_outputs[i][:] = x
                 
-            return attn_output
+        #     return attn_output
             
-        else:
-            return self.o_proj(attn_output)[0]
+        # else:
+        return self.o_proj(attn_output)[0]
 
 
 
