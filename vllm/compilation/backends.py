@@ -8,7 +8,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from contextlib import ExitStack
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import cast, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 from unittest.mock import patch
 
 import torch
@@ -417,6 +417,15 @@ class PiecewiseCompileInterpreter(torch.fx.Interpreter):
 
 
 @dataclass
+class TensorInfo:
+    '''
+    Stores metadata for a tensor in the graph.
+    '''
+    is_tensor: bool
+    dtype: Optional[torch.dtype] = None
+    size: Optional[torch.Size] = None
+
+@dataclass
 class DynamicDims:
     '''
     Information about the dynamic dimensions of the tensors in the graph.
@@ -431,18 +440,23 @@ class DynamicDims:
     dynamic_dims: Dict[int, Tuple[int, SymInt]]
 
 
-def infer_dynamic_dims(nodes: Iterable[Node]) -> DynamicDims:
+def infer_dynamic_dims(nodes: Iterable[Node]) -> Tuple[List[TensorInfo], DynamicDims]:
     '''
     Auxiliary function to infer the dynamic dimensions of the tensors
     from the graph nodes.
 
     Currently, we assume only one dynamic dimension exists.
+
+    Returns ([`TensorInfo`], `DynamicDims`).
     '''
     ERR_MESSAGE = 'Only one dynamic dimension is supported.'
 
     dynamic_dims: Dict[int, Tuple[int, SymInt]] = {}
     sym_index: Optional[int] = None
     sym_int: Optional[SymInt] = None
+
+    # For pre-allocating storage for output tensors
+    infos: List[TensorInfo] = []
 
     for arg_index, node in enumerate(nodes):
         example_value: Union[FakeTensor, SymInt] = node.meta['example_value']
@@ -453,10 +467,15 @@ def infer_dynamic_dims(nodes: Iterable[Node]) -> DynamicDims:
                 raise ValueError(ERR_MESSAGE)
             sym_index = arg_index
             sym_int = example_value
+            infos.append(TensorInfo(is_tensor=False))
             continue
     
         example_value: FakeTensor
+        dtype = example_value.dtype
         shape = example_value.shape
+
+        infos.append(TensorInfo(is_tensor=True, dtype=dtype, size=shape))
+
         for dim, size in enumerate(shape):
             size: Union[int, SymInt]
             if isinstance(size, SymInt):
@@ -467,10 +486,10 @@ def infer_dynamic_dims(nodes: Iterable[Node]) -> DynamicDims:
                 sym_int = size
                 dynamic_dims[arg_index] = dim, size
     
-    return DynamicDims(sym_index, sym_int, dynamic_dims)
+    return infos, DynamicDims(sym_index, sym_int, dynamic_dims)
 
 
-def get_input_dynamic_dims(module: fx.GraphModule) -> DynamicDims:
+def get_input_dynamic_dims(module: fx.GraphModule) -> Tuple[List[TensorInfo], DynamicDims]:
     '''
     Auxiliary function to get the indices of the input tensors with dynamic
     shapes, and the corresponding dynamic dimensions.
@@ -483,7 +502,7 @@ def get_input_dynamic_dims(module: fx.GraphModule) -> DynamicDims:
     ))
 
 
-def get_output_dynamic_dims(module: fx.GraphModule) -> DynamicDims:
+def get_output_dynamic_dims(module: fx.GraphModule) -> Tuple[List[TensorInfo], DynamicDims]:
     '''
     Auxiliary function to get the indices of the output tensors with dynamic
     shapes, and the corresponding dynamic dimensions.
@@ -501,13 +520,13 @@ def get_output_dynamic_dims(module: fx.GraphModule) -> DynamicDims:
         output_nodes = output_nodes,
     
     output_nodes: Tuple
-    dynamic_dims = infer_dynamic_dims(output_nodes)
+    infos, dynamic_dims = infer_dynamic_dims(output_nodes)
 
     # Otherwise we cannot concat the output tensors
     assert len(dynamic_dims.dynamic_dims) == len(output_nodes), \
         'All output tensors must have dynamic shapes.'
 
-    return dynamic_dims
+    return infos, dynamic_dims
 
 
 class ChunkWrapper(nn.Module):
@@ -521,8 +540,8 @@ class ChunkWrapper(nn.Module):
         super().__init__()
         self.module = module
         self.chunk_size = chunk_size
-        self.input_dynamic_dims = get_input_dynamic_dims(module)
-        self.output_dynamic_dims = get_output_dynamic_dims(module)
+        self.input_tensor_infos, self.input_dynamic_dims = get_input_dynamic_dims(module)
+        self.output_tensor_infos, self.output_dynamic_dims = get_output_dynamic_dims(module)
     
     def forward(self, *args) -> Union[Tensor, Tuple[Tensor, ...]]:
         # print(f'Starting chunked forward: {self.module._get_name()}')
@@ -549,9 +568,16 @@ class ChunkWrapper(nn.Module):
         # The real chunk sizes
         chunk_sizes: List[int] = []
         input_chunks: Dict[int, Tuple[Tensor, ...]] = {}
+        actual_dynamic_size = -1
         for arg_index, (dim, _) in input_dynamic_dims.items():
             input_tensor: Tensor = args[arg_index]
+
             size = input_tensor.size(dim)
+            if actual_dynamic_size == -1:
+                actual_dynamic_size = size
+            elif actual_dynamic_size != size:
+                raise ValueError('All dynamic dimensions must have the same size.')
+
             chunk_count = size // chunk_size
             if size % chunk_size != 0:
                 chunk_count += 1
@@ -567,9 +593,25 @@ class ChunkWrapper(nn.Module):
         total_chunks = len(next(iter(input_chunks.values())))
         for chunk in input_chunks.values():
             assert len(chunk) == total_chunks
-        
+
+        # Reserve storage for output tensors
+        output_tensors: List[Tensor] = []
+        device = next(iter(input_chunks.values()))[0].device
+        for arg_index, tensor_info in enumerate(self.output_tensor_infos):
+            # We assume all output tensors have dynamic shapes here
+            assert tensor_info.is_tensor
+            assert arg_index in output_dynamic_dims
+
+            # Substitute the dynamic size with the padded size
+            size = list(cast(torch.Size, tensor_info.size))
+            dynamic_dim, _ = output_dynamic_dims[arg_index]
+            size[dynamic_dim] = sum(chunk_sizes)
+
+            # Create the output tensor
+            output_tensors.append(torch.empty(size, dtype=tensor_info.dtype, device=device))
+
         # Forward with each chunk
-        output_chunks: List[Tuple[Tensor]] = []
+        chunk_begin = 0
         for chunk_index in range(total_chunks):
             chunked_args = [
                 input_chunks[arg_index][chunk_index]
@@ -584,16 +626,17 @@ class ChunkWrapper(nn.Module):
             # Wrap single output in a tuple for simplicity
             if not isinstance(output_chunk, tuple):
                 output_chunk = output_chunk,
+            output_chunk: Tuple[Tensor]
 
-            output_chunks.append(output_chunk)
-
-        # Concatenate the output tensors
-        output_tensors: List[Tensor] = []
-        for arg_index, (dim, _) in output_dynamic_dims.items():
-            output_tensors.append(torch.cat([
-                output_chunk[arg_index]
-                for output_chunk in output_chunks
-            ], dim=dim))
+            # Place the output tensors in the correct position
+            chunk_end = chunk_begin + chunk_sizes[chunk_index]
+            for arg_index, tensor_chunk in enumerate(output_chunk):
+                dynamic_dim, _ = output_dynamic_dims[arg_index]
+                slices = [slice(None)] * len(tensor_chunk.shape)
+                slices[dynamic_dim] = slice(chunk_begin, chunk_end)
+                output_tensors[arg_index][slices] = tensor_chunk
+            
+            chunk_begin += chunk_sizes[chunk_index]
 
         if len(output_tensors) == 1:
             return output_tensors[0]
