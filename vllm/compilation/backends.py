@@ -597,18 +597,28 @@ class ChunkWrapper(nn.Module):
         # Reserve storage for output tensors
         output_tensors: List[Tensor] = []
         device = next(iter(input_chunks.values()))[0].device
+        reused_input_args = set()
         for arg_index, tensor_info in enumerate(self.output_tensor_infos):
             # We assume all output tensors have dynamic shapes here
             assert tensor_info.is_tensor
             assert arg_index in output_dynamic_dims
 
-            # Substitute the dynamic size with the padded size
+            # Substitute the dynamic size with the actual size
             size = list(cast(torch.Size, tensor_info.size))
             dynamic_dim, _ = output_dynamic_dims[arg_index]
-            size[dynamic_dim] = sum(chunk_sizes)
+            size[dynamic_dim] = actual_dynamic_size
 
-            # Create the output tensor
-            output_tensors.append(torch.empty(size, dtype=tensor_info.dtype, device=device))
+            for input_arg_index in input_dynamic_dims.keys() - reused_input_args:
+                input_tensor = cast(Tensor, args[input_arg_index])
+                # Optimization: reuse the input tensor for storage if shapes match
+                # Note: convert to tuple here because `torch.Size` didn't implement `__eq__`
+                if tuple(input_tensor.shape) == tuple(size):
+                    reused_input_args.add(input_arg_index)
+                    output_tensors.append(input_tensor)
+                    break
+            else:
+                # Create the output tensor
+                output_tensors.append(torch.empty(size, dtype=tensor_info.dtype, device=device))
 
         # Forward with each chunk
         chunk_begin = 0
