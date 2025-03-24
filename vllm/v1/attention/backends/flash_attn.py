@@ -178,7 +178,6 @@ class FlashAttentionImpl(AttentionImpl):
         # value[:num_actual_tokens] because the reshape_and_cache_flash op uses
         # the slot_mapping's shape to determine the number of actual tokens.
 
-        # FIXME(bowen)
         # NOTE(Kuntai): in prefill-only case there will be -1s in block table.
         # Luckily the reshape_and_cache_flash op will ignore the -1s.
         key_cache, value_cache = kv_cache.unbind(0)
@@ -189,8 +188,8 @@ class FlashAttentionImpl(AttentionImpl):
             value_cache,
             attn_metadata.slot_mapping,
             self.kv_cache_dtype,
-            torch.tensor(k_scale),
-            torch.tensor(v_scale),
+            k_scale,
+            v_scale,
         )
 
 
