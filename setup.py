@@ -257,7 +257,8 @@ class cmake_build_ext(build_ext):
 
 class repackage_wheel(build_ext):
     """Extracts libraries and other files from an existing wheel."""
-    default_wheel = "https://wheels.vllm.ai/nightly/vllm-1.0.0.dev-cp38-abi3-manylinux1_x86_64.whl"
+    COMMIT = '241ad7b301facac0728e2b3312d71fe47acc8c9e'
+    default_wheel = f"https://wheels.vllm.ai/{COMMIT}/vllm-1.0.0.dev-cp38-abi3-manylinux1_x86_64.whl"
 
     def run(self) -> None:
         wheel_location = os.getenv("VLLM_PRECOMPILED_WHEEL_LOCATION",

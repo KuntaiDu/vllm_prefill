@@ -178,7 +178,6 @@ class FlashAttentionImpl(AttentionImpl):
         # value[:num_actual_tokens] because the reshape_and_cache_flash op uses
         # the slot_mapping's shape to determine the number of actual tokens.
 
-
         # NOTE(Kuntai): in prefill-only case there will be -1s in block table.
         # Luckily the reshape_and_cache_flash op will ignore the -1s.
         key_cache, value_cache = kv_cache.unbind(0)
