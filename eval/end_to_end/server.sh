@@ -80,6 +80,9 @@ if [ "$1" = "vanilla" ]; then
     python sessionid_routing.py &
     PIDS+=($!)
 
+    python name_server.py --name "vanilla" &
+    PIDS+=($!)
+
 elif [ "$1" = "chunked" ]; then
     CUDA_VISIBLE_DEVICES=0 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
         --max-model-len $MAX_MODEL_LEN \
@@ -105,6 +108,9 @@ elif [ "$1" = "chunked" ]; then
     python sessionid_routing.py &
     PIDS+=($!)
 
+    python name_server.py --name "chunked" &
+    PIDS+=($!)
+
 elif [ "$1" = "tp" ]; then
     CUDA_VISIBLE_DEVICES=0,1 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
         --max-model-len $MAX_MODEL_LEN \
@@ -118,6 +124,9 @@ elif [ "$1" = "tp" ]; then
     PIDS+=($!)
     wait_for_server 8000
 
+    python name_server.py --name "tp" &
+    PIDS+=($!)
+
 elif [ "$1" = "pp" ]; then
     # fall back to v0 for pipeline parallel
     CUDA_VISIBLE_DEVICES=0,1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
@@ -130,6 +139,9 @@ elif [ "$1" = "pp" ]; then
         --port 8000 &
     PIDS+=($!)
     wait_for_server 8000
+
+    python name_server.py --name "pp" &
+    PIDS+=($!)
 
 elif [ "$1" = "prefill" ]; then
     CUDA_VISIBLE_DEVICES=0 PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
@@ -158,6 +170,9 @@ elif [ "$1" = "prefill" ]; then
     wait_for_server 8200
 
     python sessionid_routing.py &
+    PIDS+=($!)
+
+    python name_server.py --name "prefill" &
     PIDS+=($!)
 
 else

@@ -1,7 +1,15 @@
 #!/bin/bash
 
-# This is the name for the experiment. Different baselines need different experiment names.
-experiment_name="LMPrefill"
+# Get the name of the method we are running at the server side.
+# currently, it can be "vanilla", "chunked", "tp", "pp", or "prefill"
+method_name=$(curl -s http://localhost:5000/name)
+
+if [ -z "$method_name" ]; then
+    echo "Method name is empty, please wait for the server to start"
+    exit 1
+fi
+
+echo "vLLM server is running $method_name"
 
 # Tune the hyper-parameters here to change the workload.
 num_users=40
@@ -14,19 +22,22 @@ document_length=150
 
 
 serialize_to_filename() {
-  local prefix="$1"; shift
   local parts=()
   for var in "$@"; do
     local val="${!var}"
     val_escaped=$(printf '%q' "$val")         # safely escape
     parts+=("${var}__${val_escaped}")
   done
-  local filename="${prefix}__$(IFS='__'; echo "${parts[*]}")"
+  filename="${parts[0]}"
+  for part in "${parts[@]:1}"; do
+    filename+="__${part}"
+  done
   echo "$filename"
+  sleep 5
 }
 
 
-results_dir=$(realpath "results/$experiment_name")
+results_dir=$(realpath "results/$method_name")
 
 echo "Results directory: $results_dir"
 
@@ -46,14 +57,11 @@ python generate_dataset_linkedin.py \
 
 echo "Benchmarking vLLM"
 
-for qps in 0.5 1 2 4; do
+for qps in 2 4; do
 
     # usage:
-    # the first variable is the experiment name, give it whatever the name 
-    # you like
-    # then, put all variables you used sequenatially after that, so that you 
-    # can resume these variables just from filename
-    filename=$(serialize_to_filename "round1" qps num_users num_documents user_history_mean user_history_std user_history_min user_history_max document_length)
+    # put all variables you used sequenatially, and it will be dumped into the filename.
+    filename=$(serialize_to_filename qps num_users num_documents user_history_mean user_history_std user_history_min user_history_max document_length)
 
     if [ -f results/$filename.done ]; then
         echo "Skipping $filename because it already exists"
@@ -69,6 +77,7 @@ for qps in 0.5 1 2 4; do
         --request-rate $qps \
         --sharegpt-output-len 1 \
         --backend vllm \
+        --save-result \
         --result-dir $results_dir \
         --result-filename $filename.json
 

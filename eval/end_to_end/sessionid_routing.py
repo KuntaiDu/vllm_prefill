@@ -58,6 +58,7 @@ async def handle_request():
         print("Error occurred in disagg prefill proxy server")
         print(e)
         print("".join(traceback.format_exception(*exc_info)))
+        raise e
 
 
 if __name__ == '__main__':
