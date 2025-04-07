@@ -99,8 +99,10 @@ def sample_sharegpt_requests(
     # Filter out the conversations with less than 2 turns.
     dataset = [data for data in dataset if len(data["conversations"]) >= 2]
     # Only keep the first two turns of each conversation.
+    # NOTE(Kuntai): hack to pass the user id to the proxy server.
     dataset = [(data["conversations"][0]["value"],
-                data["conversations"][1]["value"]) for data in dataset]
+                data["conversations"][1]["value"],
+                data["id"]) for data in dataset]
 
     # Shuffle the dataset.
     random.shuffle(dataset)
@@ -127,7 +129,7 @@ def sample_sharegpt_requests(
         # if prompt_len > 1024 or prompt_len + output_len > 2048:
         #     # Prune too long sequences.
         #     continue
-        filtered_dataset.append((prompt, prompt_len, output_len, None))
+        filtered_dataset.append((prompt, prompt_len, output_len, dataset[i][2]))
 
     return filtered_dataset
 
@@ -550,10 +552,11 @@ async def benchmark(
     print("Starting initial single prompt test run...")
     test_prompt, test_prompt_len, test_output_len, test_mm_content = (
         input_requests[0])
-    if backend != "openai-chat" and test_mm_content is not None:
-        # multi-modal benchmark is only available on OpenAI Chat backend.
-        raise ValueError(
-            "Multi-modal content is only supported on 'openai-chat' backend.")
+    # NOTE(Kuntai): disable this as we reuse mm_content to pass user id
+    # if backend != "openai-chat" and test_mm_content is not None:
+    #     # multi-modal benchmark is only available on OpenAI Chat backend.
+    #     raise ValueError(
+    #         "Multi-modal content is only supported on 'openai-chat' backend.")
     test_input = RequestFuncInput(
         model=model_id,
         prompt=test_prompt,
@@ -562,7 +565,8 @@ async def benchmark(
         output_len=test_output_len,
         logprobs=logprobs,
         best_of=best_of,
-        multi_modal_content=test_mm_content,
+        multi_modal_content=None,
+        extra_body={"user_id": test_mm_content},
         ignore_eos=ignore_eos,
     )
     test_output = await request_func(request_func_input=test_input)
@@ -625,7 +629,10 @@ async def benchmark(
                                               output_len=output_len,
                                               logprobs=logprobs,
                                               best_of=best_of,
-                                              multi_modal_content=mm_content,
+                                              multi_modal_content=None,
+                                              # NOTE(Kuntai): This is a hack to pass the user_id to the server.
+                                              # The server will use the user_id to do session-based routing.
+                                              extra_body={"user_id": mm_content},
                                               ignore_eos=ignore_eos)
         tasks.append(
             asyncio.create_task(

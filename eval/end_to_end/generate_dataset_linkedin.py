@@ -11,14 +11,21 @@ def generate_dataset(args):
     records = []
     for user_idx in range(args.num_users):
         user_name = f"user{user_idx}"
-        user_history = ' '.join(["Hi"] * args.user_history_length)
+
+        user_history_length =int(random.gauss(
+            args.user_history_mean, 
+            args.user_history_std
+        ))
+        user_history_length = max(user_history_length, args.user_history_min)
+        user_history_length = min(user_history_length, args.user_history_max)
+        user_history = ' '.join(["Hi"] * user_history_length)
 
         for doc_idx in range(args.num_documents):
             doc_name = f"document{doc_idx}"
             doc_text = ' '.join(["Hi"] * args.document_length)
             user_text = f"{user_name}:\n{user_history}\n\n{doc_name}:\n{doc_text}"
             record = {
-                "id": user_name,
+                "id": f"{user_idx}",
                 "conversations": [
                     {"from": "human", "value": user_text},
                     {"from": "gpt", "value": ""}
@@ -32,7 +39,10 @@ def generate_dataset(args):
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser(description='Generate Long Document QA dataset.')
-    parser.add_argument('--user-history-length', type=int, default=20000)
+    parser.add_argument('--user-history-mean', type=float, default=20000)
+    parser.add_argument('--user-history-std', type=float, default=3000)
+    parser.add_argument('--user-history-min', type=int, default=10)
+    parser.add_argument('--user-history-max', type=int, default=40000)
     parser.add_argument('--num-users', type=int, default=8)
     parser.add_argument('--document-length', type=int, default=150)
     parser.add_argument('--num-documents', type=int, default=50)
