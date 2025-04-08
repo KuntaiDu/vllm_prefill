@@ -202,3 +202,8 @@ benchmarks/*.json
 # Linting
 actionlint
 shellcheck*/
+
+# NOTE(Kuntai): evaluation files
+eval/end_to_end/results
+eval/end_to_end/results/*
+eval/end_to_end/*.json

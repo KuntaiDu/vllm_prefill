@@ -12,13 +12,13 @@ fi
 echo "vLLM server is running $method_name"
 
 # Tune the hyper-parameters here to change the workload.
-num_users=40
-num_documents=5
-user_history_mean=15000
-user_history_std=3000
+num_users=2
+num_documents=10
+user_history_mean=50000
+user_history_std=5000
 user_history_min=10
-user_history_max=33000
-document_length=150
+user_history_max=60000
+document_length=1500
 
 
 serialize_to_filename() {
@@ -57,7 +57,7 @@ python generate_dataset_linkedin.py \
 
 echo "Benchmarking vLLM"
 
-for qps in 2 4; do
+for qps in "inf"; do
 
     # usage:
     # put all variables you used sequenatially, and it will be dumped into the filename.

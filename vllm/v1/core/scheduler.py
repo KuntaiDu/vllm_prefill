@@ -176,18 +176,21 @@ class Scheduler:
         # Next, schedule the WAITING requests.
         if not preempted_reqs:
 
-            def get_num_tokens_to_be_computed(request: Request) -> int:
-                if "PREFILL_ONLY" not in os.environ:
-                    # NOTE(Kuntai): for non-prefill, we just consider minimum req length.
-                    return request.num_tokens
-                
-                # NOTE(Kuntai): for prefill-only, we consider cache efficiency.
-                computed_blocks = self.kv_cache_manager.get_computed_blocks(
-                    request)
-                return request.num_tokens - len(computed_blocks) * self.block_size
+            if "SCHEDULING_ALGORITHM" in os.environ:
 
-            # Perform shortest job first scheduling.
-            self.waiting = deque(sorted(self.waiting, key=get_num_tokens_to_be_computed))
+                def get_num_tokens_to_be_computed(request: Request) -> int:
+                    if os.environ["SCHEDULING_ALGORITHM"] == "SJF":
+                        # NOTE(Kuntai): for non-prefill, we just consider minimum req length.
+                        return request.num_tokens
+                    else:
+                        assert os.environ["SCHEDULING_ALGORITHM"] == "CSJF"
+                    
+                    # NOTE(Kuntai): for prefill-only, we consider cache efficiency.
+                    computed_blocks = self.kv_cache_manager.get_computed_blocks(
+                        request)
+                    return request.num_tokens - len(computed_blocks) * self.block_size
+
+                self.waiting = deque(sorted(self.waiting, key=get_num_tokens_to_be_computed))
 
             while self.waiting:
                 if has_partial_request:
