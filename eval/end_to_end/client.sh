@@ -12,6 +12,31 @@ fi
 echo "vLLM server is running $method_name"
 
 # Tune the hyper-parameters here to change the workload.
+
+# Workload 1: (showcase shortest remaining job first scheduling)
+#   assume request length is k in maximum
+#   make sure that prefill-only can cache the KV cache of k tokens
+#   make sure that vanilla vLLM cannot handle request length k
+#   make sure that vLLM + chunked prefill can handle request length k
+#   num_user is even
+#   num_documents reasonalby large.
+#   make sure that the randomness of request length is high.
+
+#   baselines:
+#     - vLLM + chunked prefill
+#     - vLLM + tp 2
+#     - vLLM + pp 2
+
+# Workload 2: (show hybrid prefilling mainly)
+#   assume request length is k in maximum
+#   make sure that k is close to max length that vLLM + prefill can handle
+#   make sure num_documents = 1
+#   make sure that the randomness of request length is high (for us to be better than pp)
+
+#   baselines:
+#     - vLLM + tp 2
+#     - vLLM + pp 2
+
 num_users=6
 num_documents=20
 user_history_mean=40000
@@ -22,6 +47,9 @@ document_mean=300
 document_std=150
 document_min=10
 document_max=500
+
+
+
 
 
 serialize_to_filename() {
