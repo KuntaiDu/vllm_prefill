@@ -12,13 +12,16 @@ fi
 echo "vLLM server is running $method_name"
 
 # Tune the hyper-parameters here to change the workload.
-num_users=2
-num_documents=10
-user_history_mean=50000
-user_history_std=5000
-user_history_min=10
-user_history_max=60000
-document_length=1500
+num_users=6
+num_documents=20
+user_history_mean=40000
+user_history_std=1
+user_history_min=10000
+user_history_max=55000
+document_mean=300
+document_std=150
+document_min=10
+document_max=500
 
 
 serialize_to_filename() {
@@ -52,7 +55,10 @@ python generate_dataset_linkedin.py \
     --user-history-min $user_history_min \
     --user-history-max $user_history_max \
     --num-users $num_users \
-    --document-length $document_length \
+    --document-mean $document_mean \
+    --document-std $document_std \
+    --document-min $document_min \
+    --document-max $document_max \
     --num-documents $num_documents
 
 echo "Benchmarking vLLM"
@@ -61,7 +67,7 @@ for qps in "inf"; do
 
     # usage:
     # put all variables you used sequenatially, and it will be dumped into the filename.
-    filename=$(serialize_to_filename qps num_users num_documents user_history_mean user_history_std user_history_min user_history_max document_length)
+    filename=$(serialize_to_filename qps num_users num_documents user_history_mean user_history_std user_history_min user_history_max document_mean document_std document_min document_max)
 
     if [ -f results/$filename.done ]; then
         echo "Skipping $filename because it already exists"

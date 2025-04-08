@@ -6,7 +6,7 @@ set -e
 export NCCL_P2P_LEVEL=SYS
 
 # make sure MAX_MODEL_LEN is longer than user_history_max + document_length + 100
-MAX_MODEL_LEN=35000
+MAX_MODEL_LEN=41000
 GPU_UTIL=0.31
 
 # Store PIDs of background processes
@@ -82,6 +82,8 @@ if [ "$1" = "vanilla" ]; then
         --enforce-eager \
         --enable-prefix-caching \
         --max-num-seqs 1 \
+        --disable-log-stats \
+        --disable-log-requests \
         --port 8100 &
     PIDS+=($!)
 
@@ -92,6 +94,8 @@ if [ "$1" = "vanilla" ]; then
         --enforce-eager \
         --enable-prefix-caching \
         --max-num-seqs 1 \
+        --disable-log-stats \
+        --disable-log-requests \
         --port 8200 &
     PIDS+=($!)
 
@@ -111,6 +115,8 @@ elif [ "$1" = "chunked" ]; then
         --enforce-eager \
         --enable-prefix-caching \
         --max-num-seqs 1 \
+        --disable-log-stats \
+        --disable-log-requests \
         --port 8100 &
     PIDS+=($!)
 
@@ -120,6 +126,8 @@ elif [ "$1" = "chunked" ]; then
         --enforce-eager \
         --enable-prefix-caching \
         --max-num-seqs 1 \
+        --disable-log-stats \
+        --disable-log-requests \
         --port 8200 &
     PIDS+=($!)
 
@@ -141,6 +149,8 @@ elif [ "$1" = "tp" ]; then
         --enable-prefix-caching \
         --max-num-seqs 1 \
         --tensor-parallel-size 2 \
+        --disable-log-stats \
+        --disable-log-requests \
         --port 8000 &
     PIDS+=($!)
     wait_for_server 8000
@@ -157,6 +167,8 @@ elif [ "$1" = "pp" ]; then
         --enable-prefix-caching \
         --max-num-seqs 1 \
         --pipeline-parallel-size 2 \
+        --disable-log-stats \
+        --disable-log-requests \
         --port 8000 &
     PIDS+=($!)
     wait_for_server 8000
@@ -173,6 +185,8 @@ elif [ "$1" = "prefill_csjf" ]; then
         --enable-prefix-caching \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --max-num-seqs 1 \
+        --disable-log-stats \
+        --disable-log-requests \
         --port 8100 &
     PIDS+=($!)
 
@@ -184,6 +198,8 @@ elif [ "$1" = "prefill_csjf" ]; then
         --enable-prefix-caching \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --max-num-seqs 1 \
+        --disable-log-stats \
+        --disable-log-requests \
         --port 8200 &
     PIDS+=($!)
 
@@ -209,6 +225,8 @@ elif [ "$1" = "prefill_sjf" ]; then
         --enable-prefix-caching \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --max-num-seqs 1 \
+        --disable-log-stats \
+        --disable-log-requests \
         --port 8100 &
     PIDS+=($!)
 
@@ -220,6 +238,8 @@ elif [ "$1" = "prefill_sjf" ]; then
         --enable-prefix-caching \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --max-num-seqs 1 \
+        --disable-log-stats \
+        --disable-log-requests \
         --port 8200 &
     PIDS+=($!)
 
