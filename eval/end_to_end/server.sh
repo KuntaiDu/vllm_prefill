@@ -179,7 +179,7 @@ elif [ "$1" = "pp" ]; then
 elif [ "$1" = "prefill_csjf" ]; then
     CUDA_VISIBLE_DEVICES=0 SCHEDULING_ALGORITHM=CSJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
     vllm serve meta-llama/Llama-3.1-8B-Instruct \
-        --enforce-eager \
+        -O 3 \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $GPU_UTIL \
         --enable-prefix-caching \
@@ -192,7 +192,7 @@ elif [ "$1" = "prefill_csjf" ]; then
 
     CUDA_VISIBLE_DEVICES=1 SCHEDULING_ALGORITHM=CSJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
     vllm serve meta-llama/Llama-3.1-8B-Instruct \
-        --enforce-eager \
+        -O 3 \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $GPU_UTIL \
         --enable-prefix-caching \
@@ -219,7 +219,7 @@ elif [ "$1" = "prefill_sjf" ]; then
     sleep 3
     CUDA_VISIBLE_DEVICES=0 SCHEDULING_ALGORITHM=SJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
     vllm serve meta-llama/Llama-3.1-8B-Instruct \
-        --enforce-eager \
+        -O 3 \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $GPU_UTIL \
         --enable-prefix-caching \
@@ -232,7 +232,7 @@ elif [ "$1" = "prefill_sjf" ]; then
 
     CUDA_VISIBLE_DEVICES=1 SCHEDULING_ALGORITHM=SJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
     vllm serve meta-llama/Llama-3.1-8B-Instruct \
-        --enforce-eager \
+        -O 3 \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $GPU_UTIL \
         --enable-prefix-caching \
