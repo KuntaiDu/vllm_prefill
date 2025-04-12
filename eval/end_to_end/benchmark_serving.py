@@ -421,6 +421,66 @@ async def get_request(
         await asyncio.sleep(interval)
 
 
+# NOTE(Kuntai): a new get_request function for evaluation
+
+async def get_request_multi_user(
+    input_requests,
+    request_rate,
+    burstiness=1.0,
+    intra_user_delay=0.1,
+):
+    # Group by user_id
+    user_groups = {}
+    for request in input_requests:
+        _, _, _, user_id = request
+        if user_id not in user_groups:
+            user_groups[user_id] = []
+        user_groups[user_id].append(request)
+
+    user_group_done = {}
+    for user_id in user_groups:
+        user_group_done[user_id] = False
+
+    queue = asyncio.Queue()
+    user_ids = list(user_groups.keys())
+
+    avg_requests_per_user = (
+        sum(len(reqs) for reqs in user_groups.values()) / len(user_groups)
+    )
+    user_arrival_rate = request_rate / avg_requests_per_user
+    theta = 1.0 / (user_arrival_rate * burstiness)
+
+    async def user_task(user_id, requests):
+        for req in requests:
+            await queue.put(req)
+            await asyncio.sleep(intra_user_delay)
+        user_group_done[user_id] = True
+
+    async def user_spawner():
+        user_iter = iter(user_ids)
+        while True:
+            try:
+                user_id = next(user_iter)
+            except StopIteration:
+                break
+            asyncio.create_task(user_task(user_id, user_groups[user_id]))
+            interarrival = np.random.gamma(shape=burstiness, scale=theta)
+            await asyncio.sleep(interarrival)
+
+    spawner_task = asyncio.create_task(user_spawner())
+
+    while True:
+        if queue.empty():
+            if all(user_group_done.values()):
+                break
+            else:
+                await asyncio.sleep(0)
+        else:
+            req = await queue.get()
+            queue.task_done()
+            yield req
+
+
 def calculate_metrics(
     input_requests: List[Tuple[str, int, int]],
     outputs: List[RequestFuncOutput],
@@ -543,6 +603,7 @@ async def benchmark(
     ignore_eos: bool,
     gootput_config_dict: Dict[str, float],
     max_concurrency: Optional[int],
+    intra_delay: float,
 ):
     if backend in ASYNC_REQUEST_FUNCS:
         request_func = ASYNC_REQUEST_FUNCS[backend]
@@ -620,7 +681,7 @@ async def benchmark(
 
     benchmark_start_time = time.perf_counter()
     tasks: List[asyncio.Task] = []
-    async for request in get_request(input_requests, request_rate, burstiness):
+    async for request in get_request_multi_user(input_requests, request_rate, burstiness, intra_delay):
         prompt, prompt_len, output_len, mm_content = request
         request_func_input = RequestFuncInput(model=model_id,
                                               prompt=prompt,
@@ -902,6 +963,7 @@ def main(args: argparse.Namespace):
             ignore_eos=args.ignore_eos,
             gootput_config_dict=gootput_config_dict,
             max_concurrency=args.max_concurrency,
+            intra_delay=args.intra_delay,
         ))
 
     # Save config and results to json
@@ -1098,6 +1160,12 @@ if __name__ == "__main__":
         default=None,
         help="Specify directory to save benchmark json results."
         "If not specified, results are saved in the current directory.",
+    )
+    parser.add_argument(
+        "--intra-delay",
+        type=float,
+        default=0.1,
+        help="Delay between requests from the same user. This can be used to simulate a more realistic user behavior.",
     )
     parser.add_argument(
         "--result-filename",

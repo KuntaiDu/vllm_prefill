@@ -37,17 +37,17 @@ echo "vLLM server is running $method_name"
 #     - vLLM + tp 2
 #     - vLLM + pp 2
 
-num_users=6
-num_documents=20
+num_users=4
+num_documents=50
 user_history_mean=40000
 user_history_std=1
 user_history_min=10000
-user_history_max=55000
-document_mean=300
-document_std=150
+user_history_max=50000
+document_mean=150
+document_std=1
 document_min=10
 document_max=500
-
+intra_delay=0.05 # 50ms
 
 
 
@@ -91,7 +91,7 @@ python generate_dataset_linkedin.py \
 
 echo "Benchmarking vLLM"
 
-for qps in "inf"; do
+for qps in inf; do
 
     # usage:
     # put all variables you used sequenatially, and it will be dumped into the filename.
@@ -113,7 +113,8 @@ for qps in "inf"; do
         --backend vllm \
         --save-result \
         --result-dir $results_dir \
-        --result-filename $filename.json
+        --result-filename $filename.json \
+        --intra-delay $intra_delay
 
     if [ $? -ne 0 ]; then
         echo "Failed to run $filename, skip creating the done file"
