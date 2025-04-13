@@ -7,7 +7,27 @@ export NCCL_P2P_LEVEL=SYS
 
 # make sure MAX_MODEL_LEN is longer than user_history_max + document_length + 100
 MAX_MODEL_LEN=41000
-GPU_UTIL=0.31
+
+get_gpu_util() {
+    if [ "$1" = "tp" ]; then
+        echo 0.31
+    elif [ "$1" = "pp" ]; then
+        echo 0.31
+    elif [ "$1" = "vanilla" ]; then
+        echo 0.31
+    elif [ "$1" = "chunked" ]; then
+        echo 0.31
+    elif [ "$1" = "prefill_csjf" ]; then
+        echo 0.31
+    elif [ "$1" = "prefill_sjf" ]; then
+        echo 0.31
+    else
+        echo "Invalid argument. Use 'tp', 'pp', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
+        exit 1
+    fi
+}
+
+echo "The chosen GPU utilization is $(get_gpu_util $1) for $1"
 
 # Store PIDs of background processes
 PIDS=()
@@ -78,7 +98,7 @@ if [ "$1" = "vanilla" ]; then
     CUDA_VISIBLE_DEVICES=0 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
         --max-model-len $MAX_MODEL_LEN \
         --max-num-batched-tokens $MAX_MODEL_LEN \
-        --gpu-memory-utilization $GPU_UTIL \
+        --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
         --enable-prefix-caching \
         --max-num-seqs 1 \
@@ -90,7 +110,7 @@ if [ "$1" = "vanilla" ]; then
     CUDA_VISIBLE_DEVICES=1 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
         --max-model-len $MAX_MODEL_LEN \
         --max-num-batched-tokens $MAX_MODEL_LEN \
-        --gpu-memory-utilization $GPU_UTIL \
+        --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
         --enable-prefix-caching \
         --max-num-seqs 1 \
@@ -111,7 +131,7 @@ if [ "$1" = "vanilla" ]; then
 elif [ "$1" = "chunked" ]; then
     CUDA_VISIBLE_DEVICES=0 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
         --max-model-len $MAX_MODEL_LEN \
-        --gpu-memory-utilization $GPU_UTIL \
+        --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
         --enable-prefix-caching \
         --max-num-seqs 1 \
@@ -122,7 +142,7 @@ elif [ "$1" = "chunked" ]; then
 
     CUDA_VISIBLE_DEVICES=1 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
         --max-model-len $MAX_MODEL_LEN \
-        --gpu-memory-utilization $GPU_UTIL \
+        --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
         --enable-prefix-caching \
         --max-num-seqs 1 \
@@ -144,7 +164,7 @@ elif [ "$1" = "tp" ]; then
     CUDA_VISIBLE_DEVICES=0,1 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
         --max-model-len $MAX_MODEL_LEN \
         --max-num-batched-tokens $MAX_MODEL_LEN \
-        --gpu-memory-utilization $GPU_UTIL \
+        --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
         --enable-prefix-caching \
         --max-num-seqs 1 \
@@ -162,7 +182,7 @@ elif [ "$1" = "pp" ]; then
     # fall back to v0 for pipeline parallel
     CUDA_VISIBLE_DEVICES=0,1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
         --max-model-len $MAX_MODEL_LEN \
-        --gpu-memory-utilization $GPU_UTIL \
+        --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
         --enable-prefix-caching \
         --max-num-seqs 1 \
@@ -181,7 +201,7 @@ elif [ "$1" = "prefill_csjf" ]; then
     vllm serve meta-llama/Llama-3.1-8B-Instruct \
         -O 3 \
         --max-model-len $MAX_MODEL_LEN \
-        --gpu-memory-utilization $GPU_UTIL \
+        --gpu-memory-utilization $(get_gpu_util $1) \
         --enable-prefix-caching \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --max-num-seqs 1 \
@@ -194,7 +214,7 @@ elif [ "$1" = "prefill_csjf" ]; then
     vllm serve meta-llama/Llama-3.1-8B-Instruct \
         -O 3 \
         --max-model-len $MAX_MODEL_LEN \
-        --gpu-memory-utilization $GPU_UTIL \
+        --gpu-memory-utilization $(get_gpu_util $1) \
         --enable-prefix-caching \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --max-num-seqs 1 \
@@ -221,7 +241,7 @@ elif [ "$1" = "prefill_sjf" ]; then
     vllm serve meta-llama/Llama-3.1-8B-Instruct \
         -O 3 \
         --max-model-len $MAX_MODEL_LEN \
-        --gpu-memory-utilization $GPU_UTIL \
+        --gpu-memory-utilization $(get_gpu_util $1) \
         --enable-prefix-caching \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --max-num-seqs 1 \
@@ -234,7 +254,7 @@ elif [ "$1" = "prefill_sjf" ]; then
     vllm serve meta-llama/Llama-3.1-8B-Instruct \
         -O 3 \
         --max-model-len $MAX_MODEL_LEN \
-        --gpu-memory-utilization $GPU_UTIL \
+        --gpu-memory-utilization $(get_gpu_util $1) \
         --enable-prefix-caching \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --max-num-seqs 1 \
