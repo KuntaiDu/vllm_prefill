@@ -293,7 +293,7 @@ class FlashAttentionImpl(AttentionImpl):
             
             # flat memory layout attention and then exit.
             flash_attn_varlen_func(
-                q=query,
+                q=query[:num_actual_tokens],
                 k=key,
                 v=value,
                 cu_seqlens_q=attn_metadata.query_start_loc,
