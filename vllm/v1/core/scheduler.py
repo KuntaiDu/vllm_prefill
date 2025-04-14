@@ -1,3 +1,4 @@
+import time
 from collections import deque
 from dataclasses import dataclass
 from typing import (TYPE_CHECKING, Deque, Dict, Iterable, List, Optional, Set,
@@ -178,6 +179,8 @@ class Scheduler:
 
             if "SCHEDULING_ALGORITHM" in os.environ:
 
+                now = time.time()
+
                 def get_num_tokens_to_be_computed(request: Request) -> int:
                     if os.environ["SCHEDULING_ALGORITHM"] == "SJF":
                         # NOTE(Kuntai): for non-prefill, we just consider minimum req length.
@@ -189,8 +192,21 @@ class Scheduler:
                     computed_blocks = self.kv_cache_manager.get_computed_blocks(
                         request)
                     return request.num_tokens - len(computed_blocks) * self.block_size
+                
+                def cost(request: Request) -> float:
+                    FAIRNESS = 500
+                    fairness_term = FAIRNESS * (now - request.metrics.arrival_time)
+                    return get_num_tokens_to_be_computed(request) - fairness_term
 
-                self.waiting = deque(sorted(self.waiting, key=get_num_tokens_to_be_computed))
+                # This is O(n log n) so we avoid sorting:
+                # self.waiting = deque(sorted(self.waiting, key=get_num_tokens_to_be_computed))
+
+                # Find min cost and rotate to first
+                min_index = min(
+                    range(len(self.waiting)),
+                    key=lambda i: cost(self.waiting[i])
+                )
+                self.waiting.rotate(-min_index)
 
             while self.waiting:
                 if has_partial_request:
