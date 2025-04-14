@@ -3,24 +3,39 @@
 set -e
 
 # Turn off NVLink
-export NCCL_P2P_LEVEL=SYS
+# export NCCL_P2P_LEVEL=SYS
+export NCCL_P2P_DISABLE=1
+
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 
 # make sure MAX_MODEL_LEN is longer than user_history_max + document_length + 100
-MAX_MODEL_LEN=41000
+# 0411
+# MAX_MODEL_LEN=16351
+# MAX_MODEL_LEN=50103
+
+# 0412
+if [[ $WORKLOAD == "1" ]]; then
+    MAX_MODEL_LEN=17251
+elif [[ $WORKLOAD == "2" ]]; then
+    MAX_MODEL_LEN=60103
+else
+    echo "Invalid workload. Please set WORKLOAD to 1 or 2."
+    exit 1
+fi
 
 get_gpu_util() {
     if [ "$1" = "tp" ]; then
-        echo 0.31
+        echo 0.90
     elif [ "$1" = "pp" ]; then
-        echo 0.31
+        echo 0.95
     elif [ "$1" = "vanilla" ]; then
-        echo 0.31
+        echo 0.95
     elif [ "$1" = "chunked" ]; then
-        echo 0.31
+        echo 0.95
     elif [ "$1" = "prefill_csjf" ]; then
-        echo 0.31
+        echo 0.95
     elif [ "$1" = "prefill_sjf" ]; then
-        echo 0.31
+        echo 0.95
     else
         echo "Invalid argument. Use 'tp', 'pp', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
         exit 1
@@ -52,6 +67,7 @@ cleanup() {
 }
 
 trap cleanup INT
+trap cleanup USR1
 
 # Utility function to wait for a server to start
 wait_for_server() {
@@ -184,12 +200,14 @@ elif [ "$1" = "pp" ]; then
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
+        --max-num-batched-tokens 30000 \
         --enable-prefix-caching \
         --max-num-seqs 1 \
         --pipeline-parallel-size 2 \
         --disable-log-stats \
         --disable-log-requests \
         --port 8000 &
+        # --enable-chunked-prefill=false \
     PIDS+=($!)
     wait_for_server 8000
 
