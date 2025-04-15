@@ -194,7 +194,7 @@ class Scheduler:
                     return request.num_tokens - len(computed_blocks) * self.block_size
                 
                 def cost(request: Request) -> float:
-                    FAIRNESS = 500
+                    FAIRNESS = 0
                     fairness_term = FAIRNESS * (now - request.metrics.arrival_time)
                     return get_num_tokens_to_be_computed(request) - fairness_term
 
