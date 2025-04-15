@@ -189,9 +189,9 @@ class Scheduler:
                         assert os.environ["SCHEDULING_ALGORITHM"] == "CSJF"
                     
                     # NOTE(Kuntai): for prefill-only, we consider cache efficiency.
-                    computed_blocks = self.kv_cache_manager.get_computed_blocks(
+                    num_computed_blocks = self.kv_cache_manager.get_num_of_computed_blocks(
                         request)
-                    return request.num_tokens - len(computed_blocks) * self.block_size
+                    return request.num_tokens - num_computed_blocks * self.block_size
                 
                 def cost(request: Request) -> float:
                     FAIRNESS = 0

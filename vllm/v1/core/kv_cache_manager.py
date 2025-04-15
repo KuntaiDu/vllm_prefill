@@ -109,6 +109,42 @@ class KVCacheManager:
                 break
 
         return computed_blocks
+    
+    def get_num_of_computed_blocks(self, request: Request) -> int:
+        """Get the number of computed (cached) blocks for the request.
+
+        Args:
+            request: The request to get the computed blocks.
+
+        Returns:
+            The number of blocks that are computed for the request.
+        """
+        if not self.enable_caching:
+            # Prefix caching is disabled.
+            return 0
+
+        # The block hashes for the request may already be computed
+        # if the request was preempted and resumed.
+        if not request.kv_block_hashes:
+            request.set_kv_block_hashes(
+                hash_request_tokens(self.block_size, request))
+        block_hashes = request.kv_block_hashes
+
+        # This is monotonic, so we can use binary search to find the number of
+        # computed blocks.
+        left = 0
+        right = len(block_hashes) - 1
+        ans = -1
+        while left <= right:
+            mid = (left + right) // 2
+            block_hash = block_hashes[mid]
+            if block_hash in self.cached_block_hash_to_block:
+                ans = mid
+                left = mid + 1
+            else:
+                right = mid - 1
+
+        return ans + 1
 
     def append_slots(
         self,
