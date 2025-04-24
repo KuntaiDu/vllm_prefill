@@ -2,18 +2,10 @@
 
 set -e
 
-# Turn off NVLink
-# export NCCL_P2P_LEVEL=SYS
-export NCCL_P2P_DISABLE=1
-
+# Allow context length longer than max model length
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 
-# make sure MAX_MODEL_LEN is longer than user_history_max + document_length + 100
-# 0411
-# MAX_MODEL_LEN=16351
-# MAX_MODEL_LEN=50103
 
-# 0412
 if [[ $WORKLOAD == "1" ]]; then
     MAX_MODEL_LEN=17251
 elif [[ $WORKLOAD == "2" ]]; then
@@ -23,23 +15,59 @@ else
     exit 1
 fi
 
+
+
+# check the GPU type
+get_gpu_type() {
+  if ! command -v nvidia-smi &> /dev/null; then
+    echo "nvidia-smi not found"
+    return 1
+  fi
+
+  gpu_name=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)
+
+  if [[ $gpu_name == *"A100"* ]]; then
+    echo "A100"
+  elif [[ $gpu_name == *"H100"* ]]; then
+    echo "H100"
+  elif [[ $gpu_name == *"V100"* ]]; then
+    echo "V100"
+  elif [[ $gpu_name == *"L40"* ]]; then
+    echo "L40"
+  else
+    echo "Unknown GPU name: $gpu_name"
+    echo "Please add it to the get_gpu_type function"
+    exit 1
+  fi
+}
+
 get_gpu_util() {
-    if [ "$1" = "tp" ]; then
-        echo 0.90
-    elif [ "$1" = "pp" ]; then
-        echo 0.95
-    elif [ "$1" = "vanilla" ]; then
-        echo 0.95
-    elif [ "$1" = "chunked" ]; then
-        echo 0.95
-    elif [ "$1" = "prefill_csjf" ]; then
-        echo 0.95
-    elif [ "$1" = "prefill_sjf" ]; then
-        echo 0.95
-    else
-        echo "Invalid argument. Use 'tp', 'pp', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
-        exit 1
+    gpu_type=$(get_gpu_type)
+    if [ "$gpu_type" = "H100" ]; then
+        # GPU utilizations for H100 GPU
+        if [ "$1" = "tp" ]; then
+            echo 0.90
+        elif [ "$1" = "tp_nvlink" ]; then
+            echo 0.90
+        elif [ "$1" = "pp" ]; then
+            echo 0.90
+        elif [ "$1" = "pp_nvlink" ]; then
+            echo 0.90
+        elif [ "$1" = "vanilla" ]; then
+            echo 0.95
+        elif [ "$1" = "chunked" ]; then
+            echo 0.95
+        elif [ "$1" = "prefill_csjf" ]; then
+            echo 0.95
+        elif [ "$1" = "prefill_sjf" ]; then
+            echo 0.95
+        else
+            echo "Invalid argument. Use 'tp', 'tp_nvlink', 'pp', 'pp_nvlink', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
+            exit 1
+        fi
     fi
+
+    # @Bowen @Yiming add the GPU utilization on your side here.
 }
 
 echo "The chosen GPU utilization is $(get_gpu_util $1) for $1"
@@ -111,7 +139,7 @@ if ! command -v vllm &> /dev/null; then
 fi
 
 if [ "$1" = "vanilla" ]; then
-    CUDA_VISIBLE_DEVICES=0 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    CUDA_VISIBLE_DEVICES=0 VLLM_USE_V1=1 vllm serve $EVALUATION_MODEL_NAME \
         --max-model-len $MAX_MODEL_LEN \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
@@ -123,7 +151,7 @@ if [ "$1" = "vanilla" ]; then
         --port 8100 &
     PIDS+=($!)
 
-    CUDA_VISIBLE_DEVICES=1 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    CUDA_VISIBLE_DEVICES=1 VLLM_USE_V1=1 vllm serve $EVALUATION_MODEL_NAME \
         --max-model-len $MAX_MODEL_LEN \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
@@ -145,7 +173,7 @@ if [ "$1" = "vanilla" ]; then
     PIDS+=($!)
 
 elif [ "$1" = "chunked" ]; then
-    CUDA_VISIBLE_DEVICES=0 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    CUDA_VISIBLE_DEVICES=0 VLLM_USE_V1=1 vllm serve $EVALUATION_MODEL_NAME \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
@@ -156,7 +184,7 @@ elif [ "$1" = "chunked" ]; then
         --port 8100 &
     PIDS+=($!)
 
-    CUDA_VISIBLE_DEVICES=1 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    CUDA_VISIBLE_DEVICES=1 VLLM_USE_V1=1 vllm serve $EVALUATION_MODEL_NAME \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
@@ -177,7 +205,7 @@ elif [ "$1" = "chunked" ]; then
     PIDS+=($!)
 
 elif [ "$1" = "tp" ]; then
-    CUDA_VISIBLE_DEVICES=0,1 VLLM_USE_V1=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 VLLM_USE_V1=1 vllm serve $EVALUATION_MODEL_NAME \
         --max-model-len $MAX_MODEL_LEN \
         --max-num-batched-tokens $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
@@ -194,9 +222,27 @@ elif [ "$1" = "tp" ]; then
     python name_server.py --name "tp" &
     PIDS+=($!)
 
+elif [ "$1" = "tp_nvlink" ]; then
+    CUDA_VISIBLE_DEVICES=0,1 VLLM_USE_V1=1 vllm serve $EVALUATION_MODEL_NAME \
+        --max-model-len $MAX_MODEL_LEN \
+        --max-num-batched-tokens $MAX_MODEL_LEN \
+        --gpu-memory-utilization $(get_gpu_util $1) \
+        --enforce-eager \
+        --enable-prefix-caching \
+        --max-num-seqs 1 \
+        --tensor-parallel-size 2 \
+        --disable-log-stats \
+        --disable-log-requests \
+        --port 8000 &
+    PIDS+=($!)
+    wait_for_server 8000
+
+    python name_server.py --name "tp_nvlink" &
+    PIDS+=($!)
+
 elif [ "$1" = "pp" ]; then
     # fall back to v0 for pipeline parallel
-    CUDA_VISIBLE_DEVICES=0,1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 vllm serve $EVALUATION_MODEL_NAME \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
@@ -207,16 +253,35 @@ elif [ "$1" = "pp" ]; then
         --disable-log-stats \
         --disable-log-requests \
         --port 8000 &
-        # --enable-chunked-prefill=false \
     PIDS+=($!)
     wait_for_server 8000
 
     python name_server.py --name "pp" &
     PIDS+=($!)
 
+elif [ "$1" = "pp_nvlink" ]; then
+    # fall back to v0 for pipeline parallel
+    CUDA_VISIBLE_DEVICES=0,1 vllm serve $EVALUATION_MODEL_NAME \
+        --max-model-len $MAX_MODEL_LEN \
+        --gpu-memory-utilization $(get_gpu_util $1) \
+        --enforce-eager \
+        --max-num-batched-tokens 30000 \
+        --enable-prefix-caching \
+        --max-num-seqs 1 \
+        --pipeline-parallel-size 2 \
+        --disable-log-stats \
+        --disable-log-requests \
+        --port 8000 &
+    PIDS+=($!)
+    wait_for_server 8000
+
+    python name_server.py --name "pp_nvlink" &
+    PIDS+=($!)
+
+
 elif [ "$1" = "prefill_csjf" ]; then
-    CUDA_VISIBLE_DEVICES=0 SCHEDULING_ALGORITHM=CSJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
-    vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    FAIRNESS=500 CUDA_VISIBLE_DEVICES=0 SCHEDULING_ALGORITHM=CSJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
+    vllm serve $EVALUATION_MODEL_NAME \
         -O 3 \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
@@ -228,8 +293,8 @@ elif [ "$1" = "prefill_csjf" ]; then
         --port 8100 &
     PIDS+=($!)
 
-    CUDA_VISIBLE_DEVICES=1 SCHEDULING_ALGORITHM=CSJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
-    vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    FAIRNESS=500 CUDA_VISIBLE_DEVICES=1 SCHEDULING_ALGORITHM=CSJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
+    vllm serve $EVALUATION_MODEL_NAME \
         -O 3 \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
@@ -256,7 +321,7 @@ elif [ "$1" = "prefill_sjf" ]; then
     echo "Please use prefill_csjf for end-to-end eval"
     sleep 3
     CUDA_VISIBLE_DEVICES=0 SCHEDULING_ALGORITHM=SJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
-    vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    vllm serve $EVALUATION_MODEL_NAME \
         -O 3 \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
@@ -269,7 +334,7 @@ elif [ "$1" = "prefill_sjf" ]; then
     PIDS+=($!)
 
     CUDA_VISIBLE_DEVICES=1 SCHEDULING_ALGORITHM=SJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
-    vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    vllm serve $EVALUATION_MODEL_NAME \
         -O 3 \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
@@ -291,7 +356,7 @@ elif [ "$1" = "prefill_sjf" ]; then
     PIDS+=($!)
 
 else
-    echo "Invalid argument. Use 'vanilla', 'chunked', 'tp', 'pp', 'prefill_csjf', or 'prefill_sjf'"
+    echo "Invalid argument. Use 'vanilla', 'chunked', 'tp', 'tp_nvlink', 'pp', 'pp_nvlink', 'prefill_csjf', or 'prefill_sjf'"
     exit 1
 fi
 

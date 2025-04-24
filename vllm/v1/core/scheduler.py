@@ -14,6 +14,7 @@ from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.request import Request, RequestStatus
 
 import os
+import json
 
 if TYPE_CHECKING:
     from vllm.multimodal import MultiModalKwargs
@@ -184,7 +185,11 @@ class Scheduler:
                 def get_num_tokens_to_be_computed(request: Request) -> int:
                     if os.environ["SCHEDULING_ALGORITHM"] == "SJF":
                         # NOTE(Kuntai): for non-prefill, we just consider minimum req length.
-                        return request.num_tokens
+                        if not hasattr(request, "scheduling_cachehit_tokens"):
+                            num_computed_blocks = self.kv_cache_manager.get_num_of_computed_blocks(
+                                request)
+                            request.scheduling_cachehit_tokens = num_computed_blocks * self.block_size
+                        return request.num_tokens - request.scheduling_cachehit_tokens
                     else:
                         assert os.environ["SCHEDULING_ALGORITHM"] == "CSJF"
                     
@@ -194,7 +199,8 @@ class Scheduler:
                     return request.num_tokens - num_computed_blocks * self.block_size
                 
                 def cost(request: Request) -> float:
-                    FAIRNESS = 0
+                    assert "FAIRNESS" in os.environ
+                    FAIRNESS = float(os.environ["FAIRNESS"])
                     fairness_term = FAIRNESS * (now - request.metrics.arrival_time)
                     return get_num_tokens_to_be_computed(request) - fairness_term
 
@@ -224,6 +230,7 @@ class Scheduler:
                 # sharing, `num_computed_tokens` is always a multiple of
                 # `block_size`.
                 num_computed_tokens = len(computed_blocks) * self.block_size
+                request.num_cachehit_tokens = num_computed_tokens
                 # Number of tokens to be scheduled.
                 # We use `request.num_tokens` instead of
                 # `request.num_prompt_tokens` to consider the resumed requests,
@@ -539,6 +546,15 @@ class Scheduler:
 
     def _free_request(self, request: Request) -> None:
         assert request.is_finished()
+        if "LOG_CACHE_HIT_RATIO" in os.environ:
+            with open("/root/vllm_prefill/eval/end_to_end/request_stats.jsonl", "a") as f:
+                f.write(json.dumps({
+                    "request_id": request.request_id,
+                    "latency": time.time() - request.metrics.arrival_time,
+                    "num_tokens": request.num_tokens,
+                    "num_cachehit_tokens": request.num_cachehit_tokens,
+                    "cache_hit_ratio": request.num_cachehit_tokens / request.num_tokens
+                }) + "\n")
         self.kv_cache_manager.free(request)
         self.running_reqs_data.pop(request.request_id, None)
         del self.requests[request.request_id]

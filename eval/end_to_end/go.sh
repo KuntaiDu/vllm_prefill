@@ -1,4 +1,3 @@
-export RESULTS_PATH='results-0413-re'
 
 PIDS=()
 
@@ -23,6 +22,29 @@ cleanup() {
 cleanup_and_exit() {
     cleanup
     exit 130
+}
+
+get_gpu_type() {
+  if ! command -v nvidia-smi &> /dev/null; then
+    echo "nvidia-smi not found"
+    return 1
+  fi
+
+  gpu_name=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)
+
+  if [[ $gpu_name == *"A100"* ]]; then
+    echo "A100"
+  elif [[ $gpu_name == *"H100"* ]]; then
+    echo "H100"
+  elif [[ $gpu_name == *"V100"* ]]; then
+    echo "V100"
+  elif [[ $gpu_name == *"L40"* ]]; then
+    echo "L40"
+  else
+    echo "Unknown GPU name: $gpu_name"
+    echo "Please add it to the get_gpu_type function"
+    exit 1
+  fi
 }
 
 trap cleanup_and_exit INT
@@ -82,29 +104,46 @@ go() {
     cleanup
 }
 
-# for setting in vanilla chunked prefill_csjf tp pp; do
-#     for workload in 1 2; do
-#         for qps in inf; do
-#             go $setting $workload $qps
-#         done
-#     done
-# done
 
-export RESULTS_PATH='results-0413-re-1'
 
-for workload in 1; do
-    for setting in vanilla chunked prefill_csjf tp pp; do
-        for qps in 1.94 3.88 7.76 15.52 31.04; do
-            go $setting $workload $qps
-        done
-    done
-done
+### Main evaluation configurations
 
-export RESULTS_PATH='results-0413-re-2'
 
-for workload in 2; do
-    for setting in prefill_csjf tp pp; do
-        for qps in 0.0225 0.045 0.09 0.18 0.36; do
+gpu_type=$(get_gpu_type)
+
+export RESULTS_PATH="results-0424-$gpu_type"
+
+get_qps() {
+    # $1: gpu_type, $2: workload
+    if [ "$1" = "H100" ]; then
+        if [ "$2" = "1" ]; then
+            echo 12.0
+        elif [ "$2" = "2" ]; then
+            echo 0.16
+        fi
+    fi
+}
+
+get_model_name() {
+    if [ "$gpu_type" = "H100" ]; then
+        echo "Infermatic/Llama-3.3-70B-Instruct-FP8-Dynamic"
+    fi
+
+    # @ Bowen @ Yiming add the model name for other GPUs here
+}
+
+export EVALUATION_MODEL_NAME=$(get_model_name)
+
+
+### Main evaluation loop
+
+for workload in 1 2; do
+    for setting in chunked prefill_csjf tp_nvlink pp_nvlink; do
+        throughput=$(get_qps $gpu_type $workload)
+        echo "The selected QPS for hardware $gpu_type, workload $workload is $throughput"
+        # for qps in 0.25*$throughput 0.5*$throughput $throughput 2*$throughput 3*$throughput 4*$throughput; do
+        for qps in $throughput; do
+            echo "Running with qps $qps"
             go $setting $workload $qps
         done
     done
