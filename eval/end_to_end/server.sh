@@ -65,6 +65,23 @@ get_gpu_util() {
             echo "Invalid argument. Use 'tp', 'tp_nvlink', 'pp', 'pp_nvlink', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
             exit 1
         fi
+    elif [ "$gpu_type" = "L4" ]; then
+        # GPU utilizations for L4 GPU
+        if [ "$1" = "tp" ]; then
+            echo 0.90
+        elif [ "$1" = "pp" ]; then
+            echo 0.95
+        elif [ "$1" = "vanilla" ]; then
+            echo 0.95
+        elif [ "$1" = "chunked" ]; then
+            echo 0.95
+        elif [ "$1" = "prefill_csjf" ]; then
+            echo 0.95
+        elif [ "$1" = "prefill_sjf" ]; then
+            echo 0.95
+        else
+            echo "Invalid argument. Use 'tp', 'pp', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
+            exit 1
     fi
 
     # @Bowen @Yiming add the GPU utilization on your side here.
@@ -177,6 +194,7 @@ elif [ "$1" = "chunked" ]; then
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
+        --max-num-batched-tokens 512 \
         --enable-prefix-caching \
         --max-num-seqs 1 \
         --disable-log-stats \
@@ -188,6 +206,7 @@ elif [ "$1" = "chunked" ]; then
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
+        --max-num-batched-tokens 512 \
         --enable-prefix-caching \
         --max-num-seqs 1 \
         --disable-log-stats \
@@ -207,7 +226,7 @@ elif [ "$1" = "chunked" ]; then
 elif [ "$1" = "tp" ]; then
     NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 VLLM_USE_V1=1 vllm serve $EVALUATION_MODEL_NAME \
         --max-model-len $MAX_MODEL_LEN \
-        --max-num-batched-tokens $MAX_MODEL_LEN \
+        --max-num-batched-tokens 512 \
         --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
         --enable-prefix-caching \
@@ -225,7 +244,7 @@ elif [ "$1" = "tp" ]; then
 elif [ "$1" = "tp_nvlink" ]; then
     CUDA_VISIBLE_DEVICES=0,1 VLLM_USE_V1=1 vllm serve $EVALUATION_MODEL_NAME \
         --max-model-len $MAX_MODEL_LEN \
-        --max-num-batched-tokens $MAX_MODEL_LEN \
+        --max-num-batched-tokens 512 \
         --gpu-memory-utilization $(get_gpu_util $1) \
         --enforce-eager \
         --enable-prefix-caching \

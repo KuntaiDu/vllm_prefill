@@ -92,7 +92,7 @@ go() {
     # Wait for the server to start
     if ! wait_for_server 5000; then
         echo "Server failed to start."
-        continue
+        return 0
     fi
 
     echo "Server started with PID ${PIDS[-1]}"
@@ -102,6 +102,8 @@ go() {
 
     # Done! Stop the server
     cleanup
+
+    echo "Done: $setting, workload: $workload, qps: $qps\n"
 }
 
 
@@ -127,6 +129,13 @@ get_qps() {
 get_model_name() {
     if [ "$gpu_type" = "H100" ]; then
         echo "Infermatic/Llama-3.3-70B-Instruct-FP8-Dynamic"
+    elif [ "$gpu_type" = "A100" ]; then
+        echo "RedHatAI/DeepSeek-R1-Distill-Qwen-32B-FP8-dynamic"
+    elif [ "$gpu_type" = "L40" ]; then
+        echo "meta-llama/Llama-3.1-8B-Instruct"
+    else
+        echo "Unknown GPU type: $gpu_type"
+        exit 1
     fi
 
     # @ Bowen @ Yiming add the model name for other GPUs here
