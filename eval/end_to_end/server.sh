@@ -65,6 +65,24 @@ get_gpu_util() {
             echo "Invalid argument. Use 'tp', 'tp_nvlink', 'pp', 'pp_nvlink', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
             exit 1
         fi
+    elif [ "$gpu_type" = "A100" ]; then
+        # GPU utilizations for L4 GPU
+        if [ "$1" = "tp" ]; then
+            echo 0.98
+        elif [ "$1" = "pp" ]; then
+            echo 0.93
+        elif [ "$1" = "vanilla" ]; then
+            echo 0.98
+        elif [ "$1" = "chunked" ]; then
+            echo 0.98
+        elif [ "$1" = "prefill_csjf" ]; then
+            echo 0.98
+        elif [ "$1" = "prefill_sjf" ]; then
+            echo 0.98
+        else
+            echo "Invalid argument. Use 'tp', 'pp', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
+            exit 1
+    fi
     elif [ "$gpu_type" = "L4" ]; then
         # GPU utilizations for L4 GPU
         if [ "$1" = "tp" ]; then
@@ -83,8 +101,6 @@ get_gpu_util() {
             echo "Invalid argument. Use 'tp', 'pp', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
             exit 1
     fi
-
-    # @Bowen @Yiming add the GPU utilization on your side here.
 }
 
 echo "The chosen GPU utilization is $(get_gpu_util $1) for $1"
