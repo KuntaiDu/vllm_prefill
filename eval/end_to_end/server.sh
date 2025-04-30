@@ -66,7 +66,7 @@ get_gpu_util() {
             exit 1
         fi
     elif [ "$gpu_type" = "A100" ]; then
-        # GPU utilizations for L4 GPU
+        # GPU utilizations for A100 GPU
         if [ "$1" = "tp" ]; then
             echo 0.98
         elif [ "$1" = "pp" ]; then
