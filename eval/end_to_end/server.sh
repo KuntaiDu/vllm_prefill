@@ -82,7 +82,7 @@ get_gpu_util() {
         else
             echo "Invalid argument. Use 'tp', 'pp', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
             exit 1
-    fi
+        fi
     elif [ "$gpu_type" = "L4" ]; then
         # GPU utilizations for L4 GPU
         if [ "$1" = "tp" ]; then
@@ -100,6 +100,7 @@ get_gpu_util() {
         else
             echo "Invalid argument. Use 'tp', 'pp', 'vanilla', 'chunked', 'prefill_csjf', or 'prefill_sjf'"
             exit 1
+        fi
     fi
 }
 
@@ -317,7 +318,7 @@ elif [ "$1" = "pp_nvlink" ]; then
 elif [ "$1" = "prefill_csjf" ]; then
     FAIRNESS=500 CUDA_VISIBLE_DEVICES=0 SCHEDULING_ALGORITHM=CSJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
     vllm serve $EVALUATION_MODEL_NAME \
-        -O 3 \
+        --enforce-eager \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
         --enable-prefix-caching \
@@ -330,7 +331,7 @@ elif [ "$1" = "prefill_csjf" ]; then
 
     FAIRNESS=500 CUDA_VISIBLE_DEVICES=1 SCHEDULING_ALGORITHM=CSJF PREFILL_ONLY=1 PREFILL_ONLY_CHUNK_SIZE=4096 VLLM_USE_V1=1 \
     vllm serve $EVALUATION_MODEL_NAME \
-        -O 3 \
+        --enforce-eager \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $(get_gpu_util $1) \
         --enable-prefix-caching \
