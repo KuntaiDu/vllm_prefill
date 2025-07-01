@@ -295,22 +295,164 @@ class SplitItem:
     is_splitting_graph: bool
     graph: fx.GraphModule
 
+LINEAR_OPS = set([
+    'linear',
+    'dynamic_per_token_scaled_fp8_quant',
+    'cutlass_scaled_mm',
+])
+
+CHUNKABLE_FUNCTIONS = set([
+    # Basic ops
+    'getitem',
+    'add',
+    'sub',
+    'mul',
+
+    # Tensor ops
+    'empty',
+    'view',
+    'size',
+
+    # Arithmetic ops
+    'pow',
+    'square',
+    'sqrt',
+    'rsqrt',
+
+    # Activation ops
+    'sigmoid',
+    'gelu',
+    'relu',
+    'silu',
+    'tanh',
+]) | LINEAR_OPS
+
+
+def get_target_name(node: Node) -> Optional[str]:
+    """
+    Get the name of the target of a graph node.
+    """
+    if node.op == 'call_function':
+        assert isinstance(node.target, Callable)
+        return node.target.__name__
+    elif node.op == 'call_method':
+        assert isinstance(node.target, str)
+        return node.target
+    return None
+
+
+def is_linear_op(node: Node) -> bool:
+    """
+    Check if a graph node corresponds to a linear op.
+    """
+    return get_target_name(node) in LINEAR_OPS
+
+def is_chunkable_node(node: Node) -> bool:
+    """
+    Check if a graph node corresponds to a module that should be chunked.
+    
+    Args:
+        node: The graph node to check
+        graph: The graph module containing the node
+        
+    Returns:
+        bool: `True` if the node should be chunked
+    """
+    return get_target_name(node) in CHUNKABLE_FUNCTIONS
+
+def find_chunkable_node_groups(graph: fx.GraphModule) -> List[List[Node]]:
+    """
+    Find groups of consecutive nodes that should be chunked together.
+    This identifies Linear + activation + Linear patterns.
+    
+    Args:
+        graph: The graph module
+        
+    Returns:
+        List[List[Node]]: List of node groups that should be chunked together
+    """
+    nodes = list(graph.graph.nodes)
+    has_linear_in_group = False
+    chunkable_groups = []
+    current_group = []
+    
+    for node in nodes:
+        if is_chunkable_node(node):
+            if is_linear_op(node):
+                has_linear_in_group = True
+            current_group.append(node)
+        else:
+            # If we have accumulated chunkable nodes, save the group
+            if current_group:
+                # Only record the group if it contains a linear op
+                if has_linear_in_group:
+                    chunkable_groups.append(current_group)
+                has_linear_in_group = False
+                current_group = []
+    
+    # Don't forget the last group
+    if current_group:
+        if has_linear_in_group:
+            chunkable_groups.append(current_group)
+    
+    return chunkable_groups
+
 
 def split_graph(graph: fx.GraphModule,
-                ops: List[str]) -> Tuple[fx.GraphModule, List[SplitItem]]:
-    # split graph by ops
+                ops: List[str]) -> Tuple[fx.GraphModule, List[SplitItem], Set[int]]:
+    """
+    Split graph considering both attention ops and chunkable module groups.
+    
+    Args:
+        graph: The graph to split
+        ops: List of attention operation names to split on
+        
+    Returns:
+        Tuple of split graph module and list of split items
+    """
+    # Find groups of nodes that should be chunked together
+    chunkable_groups = find_chunkable_node_groups(graph)
+    
+    # Create a mapping from nodes to their group IDs
+    chunkable_node_to_group = {}
+    for group_idx, group in enumerate(chunkable_groups):
+        for node in group:
+            chunkable_node_to_group[node] = group_idx
+    
+    # Now assign subgraph IDs
     subgraph_id = 0
     node_to_subgraph_id = {}
     split_op_graphs = []
+    # Map from group index to subgraph ID
+    chunkable_graphs: Dict[int, int] = {}
+    
     for node in graph.graph.nodes:
         if node.op in ("output", "placeholder"):
             continue
+            
+        # Check if it's an attention operation
         if node.op == 'call_function' and str(node.target) in ops:
             subgraph_id += 1
             node_to_subgraph_id[node] = subgraph_id
             split_op_graphs.append(subgraph_id)
             subgraph_id += 1
+        # Check if it's part of a chunkable group
+        elif node in chunkable_node_to_group:
+            group_idx = chunkable_node_to_group[node]
+            # All nodes in the same group should have the same subgraph ID
+            if group_idx not in chunkable_graphs:
+                subgraph_id += 1
+                chunkable_graphs[group_idx] = subgraph_id
+                group_subgraph_id = subgraph_id
+                split_op_graphs.append(subgraph_id)
+                subgraph_id += 1
+            else:
+                # Find the subgraph ID for this group
+                group_subgraph_id = chunkable_graphs[group_idx]
+            
+            node_to_subgraph_id[node] = group_subgraph_id
         else:
+            # Regular node, assign to current subgraph
             node_to_subgraph_id[node] = subgraph_id
 
     # `keep_original_order` is important!
@@ -341,7 +483,7 @@ def split_graph(graph: fx.GraphModule,
     # sort by intetger graph_id, rather than string name
     outputs.sort(key=lambda x: x.graph_id)
 
-    return split_gm, outputs
+    return split_gm, outputs, set(chunkable_graphs.values())
 
 
 # we share the global graph pool among all the backends
@@ -797,7 +939,7 @@ class VllmBackend:
             "vllm.unified_attention",
             "vllm.unified_attention_with_output",
         ]
-        self.split_gm, self.piecewise_graphs = split_graph(
+        self.split_gm, self.piecewise_graphs, self.chunking_subgraphs = split_graph(
             graph, SPLITTING_OPS)
 
         from torch._dynamo.utils import lazy_format_graph_code
@@ -813,20 +955,24 @@ class VllmBackend:
             item.submod_name for item in self.piecewise_graphs
             if not item.is_splitting_graph
         ]
+        print(f'{submod_names_to_compile=}', flush=True)
 
         # Wrap the split graph with a ChunkWrapper for dynamic shapes
         if ENABLE_CHUNK:
-            for name, module in self.split_gm.named_modules():
-                # Skip the root module and the splitting layers (attentions)
-                if name == '' or name not in submod_names_to_compile:
-                    continue
+            for graph_id in self.chunking_subgraphs:
+                name = f'submod_{graph_id}'
+                module = self.split_gm.get_submodule(name)
+                assert isinstance(module, fx.GraphModule)
+                print(f'Chunking {name} with chunk size {CHUNK_SIZE}', flush=True)
                 self.split_gm.set_submodule(name, ChunkWrapper(module, CHUNK_SIZE))
+        
+        # import ipdb; ipdb.set_trace()
 
         # propagate the split graph to the piecewise backend,
         # compile submodules with symbolic shapes
-        # PiecewiseCompileInterpreter(self.split_gm, submod_names_to_compile,
-        #                             self.vllm_config, self.graph_pool,
-        #                             self).run(*example_inputs)
+        PiecewiseCompileInterpreter(self.split_gm, submod_names_to_compile,
+                                    self.vllm_config, self.graph_pool,
+                                    self).run(*example_inputs)
 
         self._called = True
 
