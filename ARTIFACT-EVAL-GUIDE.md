@@ -48,7 +48,7 @@ under the following system configurations:
 - Pipeline Parallel  
 - Tensor Parallel  
 
-at varying QPS scales, as described in the paper. The results are saved in the `eval/end_to_end/results-0801-L4` directory and correspond to **Section 7 (Evaluation)**.
+at varying QPS scales, as described in the paper. The results are saved in the `eval/end_to_end/results-0801-L4-WL-{1,2}` directory and correspond to **Section 7 (Evaluation)**.
 
 ## Plotting
 

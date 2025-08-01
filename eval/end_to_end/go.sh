@@ -113,8 +113,6 @@ go() {
 
 gpu_type=$(get_gpu_type)
 
-export RESULTS_PATH="results-0801-$gpu_type"
-
 get_qps() {
     # $1: gpu_type, $2: workload
     if [ "$1" = "H100" ]; then
@@ -155,9 +153,10 @@ export EVALUATION_MODEL_NAME=$(get_model_name)
 
 ### Main evaluation loop
 
+export RESULTS_PATH="results-0801-$gpu_type-WL-1"
+
 for workload in 1; do
-    # for setting in vanilla chunked prefill_csjf tp pp; do
-    for setting in prefill_csjf tp pp; do
+    for setting in vanilla chunked prefill_csjf tp pp; do
         throughput=$(get_qps $gpu_type $workload)
         echo "The selected QPS for hardware $gpu_type, workload $workload is $throughput"
         for qps_scale in 0.25 0.5 1 2 3 4; do
@@ -167,6 +166,8 @@ for workload in 1; do
         done
     done
 done
+
+export RESULTS_PATH="results-0801-$gpu_type-WL-2"
 
 for workload in 2; do
     for setting in prefill_csjf tp pp; do

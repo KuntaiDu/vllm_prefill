@@ -94,7 +94,7 @@ get_gpu_util() {
         elif [ "$1" = "chunked" ]; then
             echo 0.95
         elif [ "$1" = "prefill_csjf" ]; then
-            echo 0.95
+            echo 0.93
         elif [ "$1" = "prefill_sjf" ]; then
             echo 0.95
         else
