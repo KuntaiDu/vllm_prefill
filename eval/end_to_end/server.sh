@@ -32,8 +32,8 @@ get_gpu_type() {
     echo "H100"
   elif [[ $gpu_name == *"V100"* ]]; then
     echo "V100"
-  elif [[ $gpu_name == *"L40"* ]]; then
-    echo "L40"
+  elif [[ $gpu_name == *"L4"* ]]; then
+    echo "L4"
   else
     echo "Unknown GPU name: $gpu_name"
     echo "Please add it to the get_gpu_type function"

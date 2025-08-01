@@ -1,0 +1,62 @@
+# Artifact Evaluation Guide
+
+## Hardware Requirements
+
+All evaluations are conducted on the following hardware:  
+
+- 2 × NVIDIA L4 GPUs on **Google Kubernetes Engine (GKE)**
+
+## Installation
+
+We use [uv](https://docs.astral.sh/uv/) to manage the Python environment. Please refer to the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/) for setup instructions.  
+
+Once `uv` is installed, run:
+
+```bash
+bash install.sh
+```
+
+This command creates a virtual environment and installs all required packages. You may need to restart your terminal to activate the environment, or adjust the activation command if you are not using bash.
+
+This project requires the Python development headers to build extension modules. If you are using Debian or Ubuntu, please run the following command to install them:
+
+```bash
+sudo apt-get update && sudo apt-get install python3-dev
+```
+
+Otherwise, please refer to the documentation of your operating system to install the equivalent Python development package.
+
+## Evaluation
+
+To reproduce our evaluation, run:
+
+```bash
+cd eval/end_to_end
+bash go.sh
+```
+
+This script executes two workloads:  
+
+- **Post recommendation**  
+- **Credit verification**  
+
+under the following system configurations:  
+
+- LMPrefill  
+- PagedAttention  
+- Chunked Prefill  
+- Pipeline Parallel  
+- Tensor Parallel  
+
+at varying QPS scales, as described in the paper. The results are saved in the `eval/end_to_end/results-0801-L4` directory and correspond to **Section 7 (Evaluation)**.
+
+## Plotting
+
+To generate the plots, run:
+
+```bash
+cd eval/end_to_end
+bash visualize/plot_all.sh
+```
+
+The generated figures are saved in the `eval/end_to_end/figures` directory and correspond to **Figure 6** and **Figure 7** in the paper.  

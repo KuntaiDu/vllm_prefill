@@ -52,7 +52,7 @@ trap cleanup_and_exit INT
 # Utility function to wait for a server to start
 wait_for_server() {
   local port=$1
-  local timeout_seconds=120
+  local timeout_seconds=1200
   local start_time=$(date +%s)
 
   echo "Waiting for server on port $port..."
@@ -113,7 +113,7 @@ go() {
 
 gpu_type=$(get_gpu_type)
 
-export RESULTS_PATH="results-0424-$gpu_type"
+export RESULTS_PATH="results-0801-$gpu_type"
 
 get_qps() {
     # $1: gpu_type, $2: workload
@@ -155,8 +155,21 @@ export EVALUATION_MODEL_NAME=$(get_model_name)
 
 ### Main evaluation loop
 
-for workload in 1 2; do
-    for setting in chunked prefill_csjf tp_nvlink pp_nvlink; do
+for workload in 1; do
+    # for setting in vanilla chunked prefill_csjf tp pp; do
+    for setting in prefill_csjf tp pp; do
+        throughput=$(get_qps $gpu_type $workload)
+        echo "The selected QPS for hardware $gpu_type, workload $workload is $throughput"
+        for qps_scale in 0.25 0.5 1 2 3 4; do
+            qps=$(echo "scale=4; $qps_scale*$throughput" | bc)
+            echo "Running with qps $qps"
+            go $setting $workload $qps
+        done
+    done
+done
+
+for workload in 2; do
+    for setting in prefill_csjf tp pp; do
         throughput=$(get_qps $gpu_type $workload)
         echo "The selected QPS for hardware $gpu_type, workload $workload is $throughput"
         for qps_scale in 0.25 0.5 1 2 3 4; do

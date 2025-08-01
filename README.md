@@ -1,3 +1,9 @@
+# Artifact Evaluation Note
+
+Please refer to [ARTIFACT-EVAL-GUIDE.md](./ARTIFACT-EVAL-GUIDE.md) for the artifact evaluation guide.
+
+---
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vllm-project/vllm/main/docs/source/assets/logos/vllm-logo-text-dark.png">
