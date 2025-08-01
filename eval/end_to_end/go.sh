@@ -38,8 +38,8 @@ get_gpu_type() {
     echo "H100"
   elif [[ $gpu_name == *"V100"* ]]; then
     echo "V100"
-  elif [[ $gpu_name == *"L40"* ]]; then
-    echo "L40"
+  elif [[ $gpu_name == *"L4"* ]]; then
+    echo "L4"
   else
     echo "Unknown GPU name: $gpu_name"
     echo "Please add it to the get_gpu_type function"
@@ -123,6 +123,15 @@ get_qps() {
         elif [ "$2" = "2" ]; then
             echo 0.16
         fi
+    elif [ "$1" = "L4" ]; then
+        if [ "$2" = "1" ]; then
+            echo 8.61
+        elif [ "$2" = "2" ]; then
+            echo 0.11
+        fi
+    else
+        echo "Unknown GPU type: $1"
+        exit 1
     fi
 }
 
@@ -131,7 +140,7 @@ get_model_name() {
         echo "Infermatic/Llama-3.3-70B-Instruct-FP8-Dynamic"
     elif [ "$gpu_type" = "A100" ]; then
         echo "RedHatAI/DeepSeek-R1-Distill-Qwen-32B-FP8-dynamic"
-    elif [ "$gpu_type" = "L40" ]; then
+    elif [ "$gpu_type" = "L4" ]; then
         echo "meta-llama/Llama-3.1-8B-Instruct"
     else
         echo "Unknown GPU type: $gpu_type"
@@ -150,8 +159,8 @@ for workload in 1 2; do
     for setting in chunked prefill_csjf tp_nvlink pp_nvlink; do
         throughput=$(get_qps $gpu_type $workload)
         echo "The selected QPS for hardware $gpu_type, workload $workload is $throughput"
-        # for qps in 0.25*$throughput 0.5*$throughput $throughput 2*$throughput 3*$throughput 4*$throughput; do
-        for qps in $throughput; do
+        for qps_scale in 0.25 0.5 1 2 3 4; do
+            qps=$(echo "scale=4; $qps_scale*$throughput" | bc)
             echo "Running with qps $qps"
             go $setting $workload $qps
         done
