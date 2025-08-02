@@ -5,7 +5,7 @@ source .venv/bin/activate
 VLLM_USE_PRECOMPILED=1 uv pip install --editable . -v
 
 # Dev dependencies
-uv pip install ipython matplotlib setuptools
+uv pip install ipython matplotlib setuptools pandas
 
 # For simple proxy
 uv pip install flask quart

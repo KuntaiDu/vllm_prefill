@@ -55,8 +55,8 @@ at varying QPS scales, as described in the paper. The results are saved in the `
 To generate the plots, run:
 
 ```bash
-cd eval/end_to_end
-bash visualize/plot_all.sh
+cd eval/end_to_end/visualize
+bash plot_all.sh
 ```
 
-The generated figures are saved in the `eval/end_to_end/figures` directory and correspond to **Figure 6** and **Figure 7** in the paper.  
+The generated figures are saved in the `eval/end_to_end/eval_figures` directory and correspond to **Figure 6** and **Figure 7** in the paper.  
