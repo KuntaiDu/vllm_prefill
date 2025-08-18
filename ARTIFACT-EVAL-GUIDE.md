@@ -10,7 +10,7 @@ All evaluations are conducted on the following hardware:
 
 We use [uv](https://docs.astral.sh/uv/) to manage the Python environment. Please refer to the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/) for setup instructions.  
 
-Once `uv` is installed, run:
+Once `uv` is installed, inside the `vllm_prefill` folder, run:
 
 ```bash
 bash install.sh
