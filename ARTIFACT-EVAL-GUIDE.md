@@ -36,7 +36,7 @@ cd eval/end_to_end
 bash go.sh
 ```
 
-Please check [this link](https://huggingface.co/docs/hub/en/security-tokens) on how to get the huggingface access token (the `HF_TOKEN` above).
+The evaluation above requires `HF_TOKEN` with the access to the model `meta-llama/Llama-3.1-8B-Instruct`. Please check [this link](https://huggingface.co/docs/hub/en/security-tokens) on how to get the huggingface access token (the `HF_TOKEN` above) and then head to [this page](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) to apply for the access of `meta-llama/Llama-3.1-8B-Instruct`.
 
 This script executes two workloads:  
 
