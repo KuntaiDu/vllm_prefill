@@ -31,9 +31,12 @@ Otherwise, please refer to the documentation of your operating system to install
 To reproduce our evaluation, run:
 
 ```bash
+export HF_TOKEN=<your HF token>
 cd eval/end_to_end
 bash go.sh
 ```
+
+Please check [this link](https://huggingface.co/docs/hub/en/security-tokens) on how to get the huggingface access token (the `HF_TOKEN` above).
 
 This script executes two workloads:  
 
