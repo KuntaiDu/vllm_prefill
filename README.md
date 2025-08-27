@@ -1,5 +1,11 @@
 # Artifact Evaluation Note
 
+This guide is for the artifact evaluation of paper
+
+PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications
+
+at SoSP 2025.
+
 Please refer to [ARTIFACT-EVAL-GUIDE.md](./ARTIFACT-EVAL-GUIDE.md) for the artifact evaluation guide.
 
 ---
